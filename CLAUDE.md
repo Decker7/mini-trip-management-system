@@ -4,7 +4,7 @@
 
 ### Issue tracker
 
-GitHub Issues (repo not yet created — no remote configured). See `docs/agents/issue-tracker.md`.
+GitHub Issues — `Decker7/mini-trip-management-system`. See `docs/agents/issue-tracker.md`.
 
 ### Triage labels
 
