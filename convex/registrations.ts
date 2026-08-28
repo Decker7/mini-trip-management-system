@@ -1,5 +1,6 @@
 import { ConvexError, v } from 'convex/values';
 import { mutation, query } from './_generated/server';
+import type { Doc, Id } from './_generated/dataModel';
 import { requireIdentity } from './lib/identity';
 
 const paymentStatus = v.union(v.literal('unpaid'), v.literal('paid'), v.literal('refunded'));
@@ -121,6 +122,117 @@ export const setPaymentStatus = mutation({
       throw new ConvexError('Registration not found.');
     }
     await ctx.db.patch(args.registrationId, { paymentStatus: args.paymentStatus });
+  }
+});
+
+export const listAll = query({
+  args: {
+    search: v.optional(v.string()),
+    tripId: v.optional(v.id('trips')),
+    paymentStatus: v.optional(paymentStatus)
+  },
+  handler: async (ctx, args) => {
+    await requireIdentity(ctx);
+
+    const search = args.search?.trim().toLowerCase();
+
+    // Every read below is an explicit take(), so no single path can exceed
+    // Convex's per-query read ceiling however large the tables grow.
+    const PARTICIPANTS_SCAN_LIMIT = 20000;
+    const MATCHED_PARTICIPANTS_LIMIT = 500;
+    const REGISTRATIONS_PER_PARTICIPANT_LIMIT = 500;
+    const SCOPED_REGISTRATIONS_LIMIT = 20000;
+    const UNSCOPED_REGISTRATIONS_LIMIT = 5000;
+
+    // `search` matches Participant fields, so resolve Participants first and
+    // walk into their Registrations by index, rather than scanning
+    // Registrations and joining a Participant per row. `participants` holds
+    // one row per person, while `registrations` grows with every
+    // person-and-Trip pair for the life of the system — so this scans the
+    // far smaller, far slower-growing table, and the rows it then reads are
+    // only the ones that can actually match.
+    let registrations;
+    let participantById: Map<Id<'participants'>, Doc<'participants'> | null>;
+
+    if (search) {
+      const participants = await ctx.db.query('participants').take(PARTICIPANTS_SCAN_LIMIT);
+      // Cap the fan-out: one index read is issued per matched Participant, so
+      // a very broad term ("a") must not turn into thousands of reads. A
+      // search this wide isn't a lookup anyone is actually reading row by row
+      // — narrowing the term is the useful response, not returning more.
+      const matches = participants
+        .filter(
+          (participant) =>
+            participant.fullName.toLowerCase().includes(search) ||
+            participant.icPassportNumber.toLowerCase().includes(search)
+        )
+        .slice(0, MATCHED_PARTICIPANTS_LIMIT);
+      participantById = new Map(matches.map((participant) => [participant._id, participant]));
+      registrations = (
+        await Promise.all(
+          matches.map((participant) =>
+            ctx.db
+              .query('registrations')
+              .withIndex('by_participant', (q) => q.eq('participantId', participant._id))
+              .take(REGISTRATIONS_PER_PARTICIPANT_LIMIT)
+          )
+        )
+      ).flat();
+    } else {
+      registrations = args.tripId
+        ? await ctx.db
+            .query('registrations')
+            .withIndex('by_trip', (q) => q.eq('tripId', args.tripId!))
+            .take(SCOPED_REGISTRATIONS_LIMIT)
+        : args.paymentStatus
+          ? await ctx.db
+              .query('registrations')
+              .withIndex('by_paymentStatus', (q) => q.eq('paymentStatus', args.paymentStatus!))
+              .take(SCOPED_REGISTRATIONS_LIMIT)
+          : await ctx.db.query('registrations').order('desc').take(UNSCOPED_REGISTRATIONS_LIMIT);
+      participantById = new Map();
+    }
+
+    // Narrow before any joining, so the lookups below only run for rows that
+    // survive into the result.
+    const filtered = registrations.filter(
+      (registration) =>
+        (!args.tripId || registration.tripId === args.tripId) &&
+        (!args.paymentStatus || registration.paymentStatus === args.paymentStatus)
+    );
+
+    // Fetch each distinct Trip and Participant once, not once per Registration.
+    const uniqueTripIds = [...new Set(filtered.map((registration) => registration.tripId))];
+    const trips = await Promise.all(uniqueTripIds.map((tripId) => ctx.db.get(tripId)));
+    const tripById = new Map(uniqueTripIds.map((tripId, index) => [tripId, trips[index]]));
+
+    const missingParticipantIds = [
+      ...new Set(filtered.map((registration) => registration.participantId))
+    ].filter((participantId) => !participantById.has(participantId));
+    const fetchedParticipants = await Promise.all(
+      missingParticipantIds.map((participantId) => ctx.db.get(participantId))
+    );
+    missingParticipantIds.forEach((participantId, index) => {
+      participantById.set(participantId, fetchedParticipants[index]);
+    });
+
+    return filtered.map((registration) => {
+      const trip = tripById.get(registration.tripId);
+      const participant = participantById.get(registration.participantId);
+      return {
+        _id: registration._id,
+        tripId: registration.tripId,
+        tripName: trip?.name ?? '',
+        participantId: registration.participantId,
+        fullName: participant?.fullName ?? '',
+        icPassportNumber: participant?.icPassportNumber ?? '',
+        email: participant?.email ?? '',
+        phone: participant?.phone ?? '',
+        paymentStatus: registration.paymentStatus,
+        registrationStatus: registration.registrationStatus,
+        registeredAt: registration.registeredAt
+      };
+    });
   }
 });
 
