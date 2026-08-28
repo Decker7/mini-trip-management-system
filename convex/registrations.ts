@@ -46,14 +46,22 @@ export const register = mutation({
       .withIndex('by_icPassportNumber', (q) => q.eq('icPassportNumber', args.icPassportNumber))
       .first();
 
-    const participantId = existingParticipant
-      ? existingParticipant._id
-      : await ctx.db.insert('participants', {
-          fullName: args.fullName,
-          icPassportNumber: args.icPassportNumber,
-          email: args.email,
-          phone: args.phone
-        });
+    let participantId;
+    if (existingParticipant) {
+      participantId = existingParticipant._id;
+      await ctx.db.patch(participantId, {
+        fullName: args.fullName,
+        email: args.email,
+        phone: args.phone
+      });
+    } else {
+      participantId = await ctx.db.insert('participants', {
+        fullName: args.fullName,
+        icPassportNumber: args.icPassportNumber,
+        email: args.email,
+        phone: args.phone
+      });
+    }
 
     const existingRegistrations = await ctx.db
       .query('registrations')
