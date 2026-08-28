@@ -27,6 +27,7 @@ import {
   PAYMENT_STATUS_LABEL,
   type PaymentStatus
 } from '@/features/registrations/lib/payment-status';
+import { RegistrationHistorySheet } from './registration-history-sheet';
 import { RegistrationStatusBadge } from './registration-status-badge';
 
 export function RosterTable({ tripId }: { tripId: Id<'trips'> }) {
@@ -89,7 +90,7 @@ export function RosterTable({ tripId }: { tripId: Id<'trips'> }) {
             <TableHead>Phone</TableHead>
             <TableHead>Payment Status</TableHead>
             <TableHead>Status</TableHead>
-            <TableHead className='w-[100px] text-right'>Actions</TableHead>
+            <TableHead className='w-[120px] text-right'>Actions</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -136,16 +137,22 @@ export function RosterTable({ tripId }: { tripId: Id<'trips'> }) {
                   <RegistrationStatusBadge status={entry.registrationStatus} />
                 </TableCell>
                 <TableCell className='text-right'>
-                  {!isCancelled && (
-                    <Button
-                      variant='ghost'
-                      size='icon'
-                      onClick={() => setCancelTarget({ id: entry._id, name: entry.fullName })}
-                    >
-                      <Icons.close className='h-4 w-4' />
-                      <span className='sr-only'>Cancel</span>
-                    </Button>
-                  )}
+                  <div className='flex justify-end'>
+                    <RegistrationHistorySheet
+                      registrationId={entry._id}
+                      participantName={entry.fullName}
+                    />
+                    {!isCancelled && (
+                      <Button
+                        variant='ghost'
+                        size='icon'
+                        onClick={() => setCancelTarget({ id: entry._id, name: entry.fullName })}
+                      >
+                        <Icons.close className='h-4 w-4' />
+                        <span className='sr-only'>Cancel</span>
+                      </Button>
+                    )}
+                  </div>
                 </TableCell>
               </TableRow>
             );

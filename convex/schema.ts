@@ -41,5 +41,5 @@ export default defineSchema({
     newValue: v.string(),
     changedBy: v.string(),
     changedAt: v.number()
-  }).index('by_registration', ['registrationId'])
+  }).index('by_registration_and_changedAt', ['registrationId', 'changedAt'])
 });
