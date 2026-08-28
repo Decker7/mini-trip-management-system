@@ -1,21 +1,28 @@
 'use client';
 
-import { useQuery } from 'convex/react';
+import { useQuery_experimental as useQuery } from 'convex/react';
 import { api } from '../../../../convex/_generated/api';
 import type { Id } from '../../../../convex/_generated/dataModel';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ParticipantPassport } from './participant-passport';
 
 export function ParticipantDetail({ participantId }: { participantId: Id<'participants'> }) {
-  const participant = useQuery(api.participants.get, { participantId });
+  // A malformed id in the URL fails the query's own argument validator
+  // before it can look anything up — the object form surfaces that as
+  // `status: 'error'` instead of throwing during render, so it reaches the
+  // same "nothing here" state below as a well-formed id for a Participant
+  // that no longer exists, rather than crashing the page.
+  const state = useQuery({ query: api.participants.get, args: { participantId } });
 
-  if (participant === undefined) {
+  if (state.status === 'pending') {
     return <div className='text-muted-foreground p-6'>Loading Participant...</div>;
   }
 
-  if (participant === null) {
+  if (state.status === 'error' || state.data === null) {
     return <div className='text-muted-foreground p-6'>This Participant no longer exists.</div>;
   }
+
+  const participant = state.data;
 
   return (
     <div className='mx-auto w-full max-w-3xl space-y-6'>

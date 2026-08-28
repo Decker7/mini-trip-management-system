@@ -1,6 +1,6 @@
 import { ConvexError, v } from 'convex/values';
 import { mutation, query } from './_generated/server';
-import { requireIdentity } from './lib/identity';
+import { requireAssignedRole } from './lib/identity';
 
 /**
  * Kept in sync with `MAX_PASSPORT_FILE_SIZE` in
@@ -13,7 +13,7 @@ const MAX_PASSPORT_FILE_BYTES = 10 * 1024 * 1024;
 export const get = query({
   args: { participantId: v.id('participants') },
   handler: async (ctx, args) => {
-    await requireIdentity(ctx);
+    await requireAssignedRole(ctx);
     const participant = await ctx.db.get(args.participantId);
     if (!participant) return null;
 
@@ -33,7 +33,7 @@ export const get = query({
 export const generateUploadUrl = mutation({
   args: {},
   handler: async (ctx) => {
-    await requireIdentity(ctx);
+    await requireAssignedRole(ctx);
     return await ctx.storage.generateUploadUrl();
   }
 });
@@ -41,7 +41,7 @@ export const generateUploadUrl = mutation({
 export const setPassport = mutation({
   args: { participantId: v.id('participants'), storageId: v.id('_storage') },
   handler: async (ctx, args) => {
-    await requireIdentity(ctx);
+    await requireAssignedRole(ctx);
 
     // The file the client already uploaded to `args.storageId` is left in
     // place on every rejection below: a mutation's writes are all-or-nothing,
@@ -53,6 +53,15 @@ export const setPassport = mutation({
       throw new ConvexError('Participant not found.');
     }
 
+    // A storage id that doesn't resolve to a real file — stale, already
+    // deleted, or simply invented — must reject outright rather than fall
+    // through as if it were a valid, empty file: `metadata` is only absent
+    // when there's genuinely nothing at `args.storageId` to attach.
+    const metadata = await ctx.db.system.get('_storage', args.storageId);
+    if (!metadata) {
+      throw new ConvexError('The uploaded file could not be found.');
+    }
+
     // File type (image/PDF) is enforced by the upload control's accept
     // filter, not re-checked here: the browser's declared Content-Type is
     // exactly as spoofable as a header on a direct API call, so a server-side
@@ -60,8 +69,7 @@ export const setPassport = mutation({
     // not a real boundary. Size is different: it's measured by Convex from
     // the bytes actually stored, so this is the one server-side check that
     // catches a client that skipped or bypassed the picker's own limit.
-    const metadata = await ctx.db.system.get('_storage', args.storageId);
-    if ((metadata?.size ?? 0) > MAX_PASSPORT_FILE_BYTES) {
+    if (metadata.size > MAX_PASSPORT_FILE_BYTES) {
       throw new ConvexError('Passport must be under 10 MB.');
     }
 
@@ -69,7 +77,11 @@ export const setPassport = mutation({
     await ctx.db.patch(args.participantId, { passportFileId: args.storageId });
     // One passport on file per Participant: the new file replaces the old
     // one outright, so the old blob is deleted rather than kept around.
-    if (previousFileId) {
+    // Guarded against `args.storageId` — re-submitting the file already on
+    // file, which the normal upload flow never does but a direct call
+    // could — since deleting it here would otherwise destroy the very file
+    // `passportFileId` was just set to.
+    if (previousFileId && previousFileId !== args.storageId) {
       await ctx.storage.delete(previousFileId);
     }
   }

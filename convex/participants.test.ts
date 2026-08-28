@@ -7,6 +7,7 @@ import schema from './schema';
 const modules = import.meta.glob('./**/*.ts');
 
 const staff = { subject: 'user_staff', role: 'staff' as const };
+const roleless = { subject: 'user_roleless' };
 
 const validParticipant = {
   fullName: 'Jane Doe',
@@ -31,6 +32,14 @@ test('get rejects an unauthenticated caller', async () => {
   const t = convexTest(schema, modules);
   const participantId = await seedParticipant(t);
   await expect(t.query(api.participants.get, { participantId })).rejects.toThrow();
+});
+
+test('get rejects an authenticated caller with no role assigned', async () => {
+  const t = convexTest(schema, modules);
+  const participantId = await seedParticipant(t);
+  await expect(
+    t.withIdentity(roleless).query(api.participants.get, { participantId })
+  ).rejects.toThrow();
 });
 
 test('get returns null for a non-existent Participant', async () => {
@@ -61,6 +70,13 @@ test('generateUploadUrl returns a URL for an authenticated caller', async () => 
   expect(typeof url).toBe('string');
 });
 
+test('generateUploadUrl rejects an authenticated caller with no role assigned', async () => {
+  const t = convexTest(schema, modules);
+  await expect(
+    t.withIdentity(roleless).mutation(api.participants.generateUploadUrl, {})
+  ).rejects.toThrow();
+});
+
 test('setPassport rejects an unauthenticated caller', async () => {
   const t = convexTest(schema, modules);
   const participantId = await seedParticipant(t);
@@ -68,6 +84,16 @@ test('setPassport rejects an unauthenticated caller', async () => {
 
   await expect(
     t.mutation(api.participants.setPassport, { participantId, storageId })
+  ).rejects.toThrow();
+});
+
+test('setPassport rejects an authenticated caller with no role assigned', async () => {
+  const t = convexTest(schema, modules);
+  const participantId = await seedParticipant(t);
+  const storageId = await t.run((ctx) => ctx.storage.store(samplePdf()));
+
+  await expect(
+    t.withIdentity(roleless).mutation(api.participants.setPassport, { participantId, storageId })
   ).rejects.toThrow();
 });
 
@@ -80,6 +106,23 @@ test('setPassport rejects a non-existent Participant', async () => {
   await expect(
     t.withIdentity(staff).mutation(api.participants.setPassport, { participantId, storageId })
   ).rejects.toThrow();
+});
+
+test('setPassport rejects a storage id that does not resolve to a real file', async () => {
+  const t = convexTest(schema, modules);
+  const participantId = await seedParticipant(t);
+  // A blob that was stored and then deleted leaves a syntactically valid
+  // storage id with nothing behind it — the same shape a stale or invented
+  // id would have.
+  const storageId = await t.run((ctx) => ctx.storage.store(samplePdf()));
+  await t.run((ctx) => ctx.storage.delete(storageId));
+
+  await expect(
+    t.withIdentity(staff).mutation(api.participants.setPassport, { participantId, storageId })
+  ).rejects.toThrow();
+
+  const participant = await t.run((ctx) => ctx.db.get(participantId));
+  expect(participant!.passportFileId).toBeUndefined();
 });
 
 test('setPassport rejects a file over the size limit', async () => {
@@ -126,4 +169,24 @@ test('setPassport replaces a previous passport and deletes the old file', async 
 
   const oldFileUrl = await t.run((ctx) => ctx.storage.getUrl(firstId));
   expect(oldFileUrl).toBeNull();
+});
+
+test('setPassport re-submitting the currently attached file does not delete it', async () => {
+  const t = convexTest(schema, modules);
+  const participantId = await seedParticipant(t);
+  const asStaff = t.withIdentity(staff);
+
+  const storageId = await t.run((ctx) => ctx.storage.store(samplePdf()));
+  await asStaff.mutation(api.participants.setPassport, { participantId, storageId });
+
+  // Not a flow the UI itself drives (each upload mints a fresh storage id),
+  // but nothing stops a direct call from resubmitting the id already on
+  // file — that must be a no-op, not a self-inflicted deletion.
+  await asStaff.mutation(api.participants.setPassport, { participantId, storageId });
+
+  const participant = await t.run((ctx) => ctx.db.get(participantId));
+  expect(participant!.passportFileId).toEqual(storageId);
+
+  const result = await asStaff.query(api.participants.get, { participantId });
+  expect(result!.passportUrl).not.toBeNull();
 });
