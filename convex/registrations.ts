@@ -199,12 +199,25 @@ export const listAll = query({
       const matches = allMatches.slice(0, MATCHED_PARTICIPANTS_LIMIT);
 
       participantById = new Map(matches.map((participant) => [participant._id, participant]));
+      // With a Trip selected, read straight from the (tripId, participantId)
+      // index instead of pulling a Participant's whole history and filtering
+      // after. That returns only the rows that can survive into the result, so
+      // this cap stops being reachable for search-plus-Trip — the combination
+      // that would otherwise report "partial" off rows the Trip filter was
+      // always going to discard.
       const perParticipant = await Promise.all(
         matches.map((participant) =>
-          ctx.db
-            .query('registrations')
-            .withIndex('by_participant', (q) => q.eq('participantId', participant._id))
-            .take(REGISTRATIONS_PER_PARTICIPANT_LIMIT + 1)
+          args.tripId
+            ? ctx.db
+                .query('registrations')
+                .withIndex('by_trip_and_participant', (q) =>
+                  q.eq('tripId', args.tripId!).eq('participantId', participant._id)
+                )
+                .take(REGISTRATIONS_PER_PARTICIPANT_LIMIT + 1)
+            : ctx.db
+                .query('registrations')
+                .withIndex('by_participant', (q) => q.eq('participantId', participant._id))
+                .take(REGISTRATIONS_PER_PARTICIPANT_LIMIT + 1)
         )
       );
       truncated ||= perParticipant.some(

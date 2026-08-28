@@ -503,6 +503,61 @@ test('listAll does not report truncation for a dataset sitting exactly on the ca
   expect(overCap.truncated).toBe(true);
 });
 
+test('listAll does not call a search-plus-Trip result partial over other Trips rows', async () => {
+  const t = convexTest(schema, modules);
+  const perParticipant = LIST_ALL_LIMITS.registrationsPerParticipant;
+
+  // One Participant whose overall history exceeds the per-Participant cap,
+  // but who holds a single Registration on the Trip being filtered to.
+  const { targetTripId } = await t.run(async (ctx) => {
+    const participantId = await ctx.db.insert('participants', validParticipant);
+    const makeTrip = (name: string) =>
+      ctx.db.insert('trips', {
+        name,
+        destination: 'Nowhere',
+        startDate: '2026-09-10',
+        endDate: '2026-09-15',
+        capacity: 10,
+        createdBy: admin.subject
+      });
+
+    const targetTripId = await makeTrip('Target Trip');
+    await ctx.db.insert('registrations', {
+      tripId: targetTripId,
+      participantId,
+      paymentStatus: 'unpaid',
+      registrationStatus: 'registered',
+      registeredAt: 0,
+      registeredBy: staff.subject
+    });
+
+    const otherTripId = await makeTrip('Other Trip');
+    for (let i = 0; i < perParticipant + 1; i++) {
+      await ctx.db.insert('registrations', {
+        tripId: otherTripId,
+        participantId,
+        paymentStatus: 'unpaid',
+        registrationStatus: 'cancelled',
+        registeredAt: i + 1,
+        registeredBy: staff.subject
+      });
+    }
+    return { targetTripId };
+  });
+
+  // Scoped to the Trip, the answer is that one row — and it is complete. The
+  // rows past the cap all belong to a Trip the filter excludes anyway.
+  const scoped = await t
+    .withIdentity(staff)
+    .query(api.registrations.listAll, { search: 'jane', tripId: targetTripId });
+  expect(scoped.rows).toHaveLength(1);
+  expect(scoped.truncated).toBe(false);
+
+  // Unscoped, the same Participant's history genuinely does overflow the cap.
+  const unscoped = await t.withIdentity(staff).query(api.registrations.listAll, { search: 'jane' });
+  expect(unscoped.truncated).toBe(true);
+});
+
 test('listAll reports truncated=false when every matching row fits', async () => {
   const t = convexTest(schema, modules);
   const tripId = await createTrip(t);
