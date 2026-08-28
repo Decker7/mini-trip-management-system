@@ -5,6 +5,7 @@ import { api } from './_generated/api';
 import schema from './schema';
 import { ACTIVITY_LOG_LIMIT } from './activityLogs';
 import type { Id } from './_generated/dataModel';
+import type { MutationCtx } from './_generated/server';
 
 const modules = import.meta.glob('./**/*.ts');
 
@@ -37,7 +38,7 @@ async function seedRegistration(t: ReturnType<typeof convexTest>) {
 }
 
 async function readLog(t: ReturnType<typeof convexTest>, registrationId: Id<'registrations'>) {
-  return await t.run((ctx) =>
+  return await t.run((ctx: MutationCtx) =>
     ctx.db
       .query('activityLogs')
       .withIndex('by_registration_and_changedAt', (q) => q.eq('registrationId', registrationId))
