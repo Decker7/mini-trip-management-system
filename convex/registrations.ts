@@ -124,6 +124,60 @@ export const setPaymentStatus = mutation({
   }
 });
 
+export const listAll = query({
+  args: {
+    search: v.optional(v.string()),
+    tripId: v.optional(v.id('trips')),
+    paymentStatus: v.optional(paymentStatus)
+  },
+  handler: async (ctx, args) => {
+    await requireIdentity(ctx);
+
+    const registrations = args.tripId
+      ? await ctx.db
+          .query('registrations')
+          .withIndex('by_trip', (q) => q.eq('tripId', args.tripId!))
+          .collect()
+      : await ctx.db.query('registrations').order('desc').take(1000);
+
+    const search = args.search?.trim().toLowerCase();
+
+    const joined = await Promise.all(
+      registrations
+        .filter(
+          (registration) => !args.paymentStatus || registration.paymentStatus === args.paymentStatus
+        )
+        .map(async (registration) => {
+          const [participant, trip] = await Promise.all([
+            ctx.db.get(registration.participantId),
+            ctx.db.get(registration.tripId)
+          ]);
+          return {
+            _id: registration._id,
+            tripId: registration.tripId,
+            tripName: trip?.name ?? '',
+            participantId: registration.participantId,
+            fullName: participant?.fullName ?? '',
+            icPassportNumber: participant?.icPassportNumber ?? '',
+            email: participant?.email ?? '',
+            phone: participant?.phone ?? '',
+            paymentStatus: registration.paymentStatus,
+            registrationStatus: registration.registrationStatus,
+            registeredAt: registration.registeredAt
+          };
+        })
+    );
+
+    if (!search) return joined;
+
+    return joined.filter(
+      (entry) =>
+        entry.fullName.toLowerCase().includes(search) ||
+        entry.icPassportNumber.toLowerCase().includes(search)
+    );
+  }
+});
+
 export const listByTrip = query({
   args: { tripId: v.id('trips') },
   handler: async (ctx, args) => {

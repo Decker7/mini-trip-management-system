@@ -286,3 +286,96 @@ test('listByTrip rejects an unauthenticated caller and returns the joined roster
     registrationStatus: 'registered'
   });
 });
+
+test('listAll rejects an unauthenticated caller and returns every Registration across Trips', async () => {
+  const t = convexTest(schema, modules);
+  const tripA = await createTrip(t, { name: 'Bali Retreat' });
+  const tripB = await createTrip(t, { name: 'Tokyo Tour' });
+
+  await t
+    .withIdentity(staff)
+    .mutation(api.registrations.register, { tripId: tripA, ...validParticipant });
+  await t.withIdentity(staff).mutation(api.registrations.register, {
+    tripId: tripB,
+    fullName: 'John Smith',
+    icPassportNumber: 'C1111111',
+    email: 'john@example.com',
+    phone: '+60111111111'
+  });
+
+  await expect(t.query(api.registrations.listAll, {})).rejects.toThrow();
+
+  const all = await t.withIdentity(staff).query(api.registrations.listAll, {});
+  expect(all).toHaveLength(2);
+  const byName = Object.fromEntries(all.map((r) => [r.fullName, r.tripName]));
+  expect(byName).toEqual({ 'Jane Doe': 'Bali Retreat', 'John Smith': 'Tokyo Tour' });
+});
+
+test('listAll filters by search across name and IC/passport number', async () => {
+  const t = convexTest(schema, modules);
+  const tripA = await createTrip(t, { name: 'Bali Retreat' });
+  const tripB = await createTrip(t, { name: 'Tokyo Tour' });
+
+  await t
+    .withIdentity(staff)
+    .mutation(api.registrations.register, { tripId: tripA, ...validParticipant });
+  await t.withIdentity(staff).mutation(api.registrations.register, {
+    tripId: tripB,
+    fullName: 'John Smith',
+    icPassportNumber: 'C1111111',
+    email: 'john@example.com',
+    phone: '+60111111111'
+  });
+
+  const byName = await t.withIdentity(staff).query(api.registrations.listAll, { search: 'jane' });
+  expect(byName.map((r) => r.fullName)).toEqual(['Jane Doe']);
+
+  const byIc = await t.withIdentity(staff).query(api.registrations.listAll, { search: 'c1111111' });
+  expect(byIc.map((r) => r.fullName)).toEqual(['John Smith']);
+});
+
+test('listAll filters by tripId', async () => {
+  const t = convexTest(schema, modules);
+  const tripA = await createTrip(t, { name: 'Bali Retreat' });
+  const tripB = await createTrip(t, { name: 'Tokyo Tour' });
+
+  await t
+    .withIdentity(staff)
+    .mutation(api.registrations.register, { tripId: tripA, ...validParticipant });
+  await t.withIdentity(staff).mutation(api.registrations.register, {
+    tripId: tripB,
+    fullName: 'John Smith',
+    icPassportNumber: 'C1111111',
+    email: 'john@example.com',
+    phone: '+60111111111'
+  });
+
+  const forTripA = await t.withIdentity(staff).query(api.registrations.listAll, { tripId: tripA });
+  expect(forTripA.map((r) => r.fullName)).toEqual(['Jane Doe']);
+});
+
+test('listAll filters by payment status', async () => {
+  const t = convexTest(schema, modules);
+  const tripA = await createTrip(t, { name: 'Bali Retreat' });
+  const tripB = await createTrip(t, { name: 'Tokyo Tour' });
+
+  const regA = await t
+    .withIdentity(staff)
+    .mutation(api.registrations.register, { tripId: tripA, ...validParticipant });
+  await t.withIdentity(staff).mutation(api.registrations.register, {
+    tripId: tripB,
+    fullName: 'John Smith',
+    icPassportNumber: 'C1111111',
+    email: 'john@example.com',
+    phone: '+60111111111'
+  });
+  await t.withIdentity(staff).mutation(api.registrations.setPaymentStatus, {
+    registrationId: regA,
+    paymentStatus: 'paid'
+  });
+
+  const paid = await t
+    .withIdentity(staff)
+    .query(api.registrations.listAll, { paymentStatus: 'paid' });
+  expect(paid.map((r) => r.fullName)).toEqual(['Jane Doe']);
+});

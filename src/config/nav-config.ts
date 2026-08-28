@@ -62,6 +62,14 @@ export const navGroups: NavGroup[] = [
         items: []
       },
       {
+        title: 'Participants',
+        url: '/dashboard/participants',
+        icon: 'user',
+        shortcut: ['p', 'a'],
+        isActive: false,
+        items: []
+      },
+      {
         title: 'Workspaces',
         url: '/dashboard/workspaces',
         icon: 'workspace',

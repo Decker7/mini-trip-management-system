@@ -4,9 +4,8 @@ import { useState } from 'react';
 import { useMutation, useQuery } from 'convex/react';
 import { toast } from 'sonner';
 import { api } from '../../../../convex/_generated/api';
-import type { Doc, Id } from '../../../../convex/_generated/dataModel';
+import type { Id } from '../../../../convex/_generated/dataModel';
 import { AlertModal } from '@/components/modal/alert-modal';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
   Select,
@@ -24,14 +23,11 @@ import {
   TableRow
 } from '@/components/ui/table';
 import { Icons } from '@/components/icons';
-
-type PaymentStatus = Doc<'registrations'>['paymentStatus'];
-
-const PAYMENT_STATUS_LABEL: Record<PaymentStatus, string> = {
-  unpaid: 'Unpaid',
-  paid: 'Paid',
-  refunded: 'Refunded'
-};
+import {
+  PAYMENT_STATUS_LABEL,
+  type PaymentStatus
+} from '@/features/registrations/lib/payment-status';
+import { RegistrationStatusBadge } from './registration-status-badge';
 
 export function RosterTable({ tripId }: { tripId: Id<'trips'> }) {
   const roster = useQuery(api.registrations.listByTrip, { tripId });
@@ -137,9 +133,7 @@ export function RosterTable({ tripId }: { tripId: Id<'trips'> }) {
                   </Select>
                 </TableCell>
                 <TableCell>
-                  <Badge variant={isCancelled ? 'outline' : 'default'}>
-                    {isCancelled ? 'Cancelled' : 'Registered'}
-                  </Badge>
+                  <RegistrationStatusBadge status={entry.registrationStatus} />
                 </TableCell>
                 <TableCell className='text-right'>
                   {!isCancelled && (
