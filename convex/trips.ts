@@ -113,6 +113,13 @@ export const remove = mutation({
     if (!existing) {
       throw new ConvexError('Trip not found.');
     }
+    const hasRegistrations = await ctx.db
+      .query('registrations')
+      .withIndex('by_trip', (q) => q.eq('tripId', args.tripId))
+      .first();
+    if (hasRegistrations) {
+      throw new ConvexError('Cannot delete a Trip that has Registrations.');
+    }
     await ctx.db.delete(args.tripId);
   }
 });

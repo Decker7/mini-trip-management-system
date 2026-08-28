@@ -29,7 +29,8 @@ export default defineSchema({
     registeredBy: v.string()
   })
     .index('by_trip', ['tripId'])
-    .index('by_participant', ['participantId']),
+    .index('by_participant', ['participantId'])
+    .index('by_trip_and_participant', ['tripId', 'participantId']),
 
   activityLogs: defineTable({
     registrationId: v.id('registrations'),
