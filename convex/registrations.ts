@@ -142,30 +142,32 @@ export const listAll = query({
 
     const search = args.search?.trim().toLowerCase();
 
+    const filtered = registrations.filter(
+      (registration) => !args.paymentStatus || registration.paymentStatus === args.paymentStatus
+    );
+
+    const uniqueTripIds = [...new Set(filtered.map((registration) => registration.tripId))];
+    const trips = await Promise.all(uniqueTripIds.map((tripId) => ctx.db.get(tripId)));
+    const tripById = new Map(uniqueTripIds.map((tripId, index) => [tripId, trips[index]]));
+
     const joined = await Promise.all(
-      registrations
-        .filter(
-          (registration) => !args.paymentStatus || registration.paymentStatus === args.paymentStatus
-        )
-        .map(async (registration) => {
-          const [participant, trip] = await Promise.all([
-            ctx.db.get(registration.participantId),
-            ctx.db.get(registration.tripId)
-          ]);
-          return {
-            _id: registration._id,
-            tripId: registration.tripId,
-            tripName: trip?.name ?? '',
-            participantId: registration.participantId,
-            fullName: participant?.fullName ?? '',
-            icPassportNumber: participant?.icPassportNumber ?? '',
-            email: participant?.email ?? '',
-            phone: participant?.phone ?? '',
-            paymentStatus: registration.paymentStatus,
-            registrationStatus: registration.registrationStatus,
-            registeredAt: registration.registeredAt
-          };
-        })
+      filtered.map(async (registration) => {
+        const participant = await ctx.db.get(registration.participantId);
+        const trip = tripById.get(registration.tripId);
+        return {
+          _id: registration._id,
+          tripId: registration.tripId,
+          tripName: trip?.name ?? '',
+          participantId: registration.participantId,
+          fullName: participant?.fullName ?? '',
+          icPassportNumber: participant?.icPassportNumber ?? '',
+          email: participant?.email ?? '',
+          phone: participant?.phone ?? '',
+          paymentStatus: registration.paymentStatus,
+          registrationStatus: registration.registrationStatus,
+          registeredAt: registration.registeredAt
+        };
+      })
     );
 
     if (!search) return joined;
