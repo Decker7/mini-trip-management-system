@@ -3,6 +3,7 @@ import { convexTest } from 'convex-test';
 import { expect, test } from 'vitest';
 import { api } from './_generated/api';
 import schema from './schema';
+import { LIST_ALL_LIMITS } from './registrations';
 
 const modules = import.meta.glob('./**/*.ts');
 
@@ -448,6 +449,58 @@ test('listAll search matches on IC/passport substring, not just a prefix', async
 
   const found = await t.withIdentity(staff).query(api.registrations.listAll, { search: '23456' });
   expect(found.rows.map((r) => r.fullName)).toEqual(['Jane Doe']);
+});
+
+test('listAll does not report truncation for a dataset sitting exactly on the cap', async () => {
+  const t = convexTest(schema, modules);
+  const limit = LIST_ALL_LIMITS.unscopedRegistrations;
+
+  // Seed exactly `limit` Registrations directly, bypassing the register
+  // mutation's Trip/Capacity rules — this is about the read cap, not
+  // registration validation.
+  const { tripId, participantId } = await t.run(async (ctx) => {
+    const tripId = await ctx.db.insert('trips', {
+      name: 'Cap Trip',
+      destination: 'Nowhere',
+      startDate: '2026-09-10',
+      endDate: '2026-09-15',
+      capacity: limit + 1,
+      createdBy: admin.subject
+    });
+    const participantId = await ctx.db.insert('participants', validParticipant);
+    for (let i = 0; i < limit; i++) {
+      await ctx.db.insert('registrations', {
+        tripId,
+        participantId,
+        paymentStatus: 'unpaid',
+        registrationStatus: 'registered',
+        registeredAt: i,
+        registeredBy: staff.subject
+      });
+    }
+    return { tripId, participantId };
+  });
+
+  // Exactly at the cap is a complete answer, not a clipped one.
+  const atCap = await t.withIdentity(staff).query(api.registrations.listAll, {});
+  expect(atCap.rows).toHaveLength(limit);
+  expect(atCap.truncated).toBe(false);
+
+  // One row beyond it genuinely is clipped.
+  await t.run(async (ctx) => {
+    await ctx.db.insert('registrations', {
+      tripId,
+      participantId,
+      paymentStatus: 'unpaid',
+      registrationStatus: 'registered',
+      registeredAt: limit,
+      registeredBy: staff.subject
+    });
+  });
+
+  const overCap = await t.withIdentity(staff).query(api.registrations.listAll, {});
+  expect(overCap.rows).toHaveLength(limit);
+  expect(overCap.truncated).toBe(true);
 });
 
 test('listAll reports truncated=false when every matching row fits', async () => {

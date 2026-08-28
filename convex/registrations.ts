@@ -5,6 +5,18 @@ import { requireIdentity } from './lib/identity';
 
 const paymentStatus = v.union(v.literal('unpaid'), v.literal('paid'), v.literal('refunded'));
 
+/**
+ * Read caps for `listAll`. Exported so tests can exercise the exact-limit
+ * boundary without hard-coding the numbers.
+ */
+export const LIST_ALL_LIMITS = {
+  participantsScan: 20000,
+  matchedParticipants: 500,
+  registrationsPerParticipant: 500,
+  scopedRegistrations: 20000,
+  unscopedRegistrations: 5000
+} as const;
+
 function validateParticipantFields(args: {
   fullName: string;
   icPassportNumber: string;
@@ -138,11 +150,13 @@ export const listAll = query({
 
     // Every read below is an explicit take(), so no single path can exceed
     // Convex's per-query read ceiling however large the tables grow.
-    const PARTICIPANTS_SCAN_LIMIT = 20000;
-    const MATCHED_PARTICIPANTS_LIMIT = 500;
-    const REGISTRATIONS_PER_PARTICIPANT_LIMIT = 500;
-    const SCOPED_REGISTRATIONS_LIMIT = 20000;
-    const UNSCOPED_REGISTRATIONS_LIMIT = 5000;
+    const {
+      participantsScan: PARTICIPANTS_SCAN_LIMIT,
+      matchedParticipants: MATCHED_PARTICIPANTS_LIMIT,
+      registrationsPerParticipant: REGISTRATIONS_PER_PARTICIPANT_LIMIT,
+      scopedRegistrations: SCOPED_REGISTRATIONS_LIMIT,
+      unscopedRegistrations: UNSCOPED_REGISTRATIONS_LIMIT
+    } = LIST_ALL_LIMITS;
 
     // `search` matches Participant fields, so resolve Participants first and
     // walk into their Registrations by index, rather than scanning
@@ -151,18 +165,26 @@ export const listAll = query({
     // person-and-Trip pair for the life of the system — so this scans the
     // far smaller, far slower-growing table, and the rows it then reads are
     // only the ones that can actually match.
-    // Any cap that actually bites is reported back as `truncated`, so callers
-    // can say "these results are incomplete, narrow your filters" instead of
-    // presenting a short list as if it were the whole answer. Silently
-    // dropping matches is the failure mode worth avoiding here; a bounded
-    // read that admits it is bounded is not.
+    // A cap that actually bites is reported back as `truncated`, so callers can
+    // say "these results are incomplete, narrow your filters" instead of
+    // presenting a short list as if it were the whole answer. `truncated` means
+    // strictly "rows existed that this query never examined, and any of them
+    // could have matched" — so it stays accurate through the filtering below,
+    // which can only ever narrow what was examined.
+    //
+    // Every capped read asks for one row more than it needs and reports
+    // truncation only when that extra row comes back. Reading exactly `limit`
+    // rows is ambiguous — it could mean "exactly limit exist" (complete) or
+    // "more exist, cut off here" (truncated) — and treating that as truncated
+    // would cry wolf on datasets that happen to land on the cap.
     let truncated = false;
     let registrations;
     let participantById: Map<Id<'participants'>, Doc<'participants'> | null>;
 
     if (search) {
-      const participants = await ctx.db.query('participants').take(PARTICIPANTS_SCAN_LIMIT);
-      truncated ||= participants.length === PARTICIPANTS_SCAN_LIMIT;
+      const scanned = await ctx.db.query('participants').take(PARTICIPANTS_SCAN_LIMIT + 1);
+      truncated ||= scanned.length > PARTICIPANTS_SCAN_LIMIT;
+      const participants = scanned.slice(0, PARTICIPANTS_SCAN_LIMIT);
 
       // Cap the fan-out: one index read is issued per matched Participant, so
       // a very broad term ("a") must not turn into thousands of reads. A
@@ -182,30 +204,36 @@ export const listAll = query({
           ctx.db
             .query('registrations')
             .withIndex('by_participant', (q) => q.eq('participantId', participant._id))
-            .take(REGISTRATIONS_PER_PARTICIPANT_LIMIT)
+            .take(REGISTRATIONS_PER_PARTICIPANT_LIMIT + 1)
         )
       );
       truncated ||= perParticipant.some(
-        (rows) => rows.length === REGISTRATIONS_PER_PARTICIPANT_LIMIT
+        (rows) => rows.length > REGISTRATIONS_PER_PARTICIPANT_LIMIT
       );
-      registrations = perParticipant.flat();
+      registrations = perParticipant.flatMap((rows) =>
+        rows.slice(0, REGISTRATIONS_PER_PARTICIPANT_LIMIT)
+      );
     } else {
       const limit =
         args.tripId || args.paymentStatus
           ? SCOPED_REGISTRATIONS_LIMIT
           : UNSCOPED_REGISTRATIONS_LIMIT;
-      registrations = args.tripId
+      const scanned = args.tripId
         ? await ctx.db
             .query('registrations')
             .withIndex('by_trip', (q) => q.eq('tripId', args.tripId!))
-            .take(limit)
+            .take(limit + 1)
         : args.paymentStatus
           ? await ctx.db
               .query('registrations')
               .withIndex('by_paymentStatus', (q) => q.eq('paymentStatus', args.paymentStatus!))
-              .take(limit)
-          : await ctx.db.query('registrations').order('desc').take(limit);
-      truncated ||= registrations.length === limit;
+              .take(limit + 1)
+          : await ctx.db
+              .query('registrations')
+              .order('desc')
+              .take(limit + 1);
+      truncated ||= scanned.length > limit;
+      registrations = scanned.slice(0, limit);
       participantById = new Map();
     }
 
