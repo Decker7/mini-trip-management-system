@@ -608,6 +608,34 @@ test('listAll does not call a search-plus-Payment-Status result partial over oth
   expect(unscoped.truncated).toBe(true);
 });
 
+test('listAll caps keep total documents scanned under Convex per-query ceiling', () => {
+  // Convex scans at most 32,000 documents per query. Capping each read alone
+  // is not enough — the search path issues one read per matched Participant,
+  // so the caps multiply. This pins the aggregate arithmetic so raising any
+  // single cap can't quietly push a real query over the ceiling.
+  const CONVEX_DOCUMENTS_SCANNED_CEILING = 32000;
+  const {
+    participantsScan,
+    matchedParticipants,
+    registrationsPerParticipant,
+    scopedRegistrations,
+    unscopedRegistrations
+  } = LIST_ALL_LIMITS;
+
+  // Search: scan Participants, then one capped read per match, then a Trip
+  // lookup per resulting row (Participants are already in memory).
+  const searchRows = matchedParticipants * (registrationsPerParticipant + 1);
+  const searchWorstCase = participantsScan + searchRows + searchRows;
+
+  // Non-search: read Registrations, then a Trip and a Participant per row.
+  const scopedWorstCase = scopedRegistrations + 2 * scopedRegistrations;
+  const unscopedWorstCase = unscopedRegistrations + 2 * unscopedRegistrations;
+
+  expect(searchWorstCase).toBeLessThan(CONVEX_DOCUMENTS_SCANNED_CEILING);
+  expect(scopedWorstCase).toBeLessThan(CONVEX_DOCUMENTS_SCANNED_CEILING);
+  expect(unscopedWorstCase).toBeLessThan(CONVEX_DOCUMENTS_SCANNED_CEILING);
+});
+
 test('listAll reports truncated=false when every matching row fits', async () => {
   const t = convexTest(schema, modules);
   const tripId = await createTrip(t);

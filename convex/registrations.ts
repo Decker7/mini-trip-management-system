@@ -8,12 +8,32 @@ const paymentStatus = v.union(v.literal('unpaid'), v.literal('paid'), v.literal(
 /**
  * Read caps for `listAll`. Exported so tests can exercise the exact-limit
  * boundary without hard-coding the numbers.
+ *
+ * Convex scans at most 32,000 documents per query, and rows dropped by a
+ * filter still count. These caps are budgeted so the *aggregate* of every
+ * read on a single call stays well under that — capping each read alone is
+ * not enough, because the search path issues one read per matched
+ * Participant and those multiply:
+ *
+ *   search path   participantsScan 10,000
+ *                 + matchedParticipants 200 x (registrationsPerParticipant 30 + 1) = 6,200
+ *                 + up to 6,200 Trip lookups for the join
+ *                 ~= 22,400
+ *
+ *   scoped path   scopedRegistrations 8,000
+ *                 + up to 8,000 Trip and 8,000 Participant lookups
+ *                 ~= 24,000
+ *
+ *   unscoped      unscopedRegistrations 5,000 + up to 10,000 join lookups
+ *                 ~= 15,000
+ *
+ * Raising any of these means redoing that arithmetic, not just the one line.
  */
 export const LIST_ALL_LIMITS = {
-  participantsScan: 20000,
-  matchedParticipants: 500,
-  registrationsPerParticipant: 500,
-  scopedRegistrations: 20000,
+  participantsScan: 10000,
+  matchedParticipants: 200,
+  registrationsPerParticipant: 30,
+  scopedRegistrations: 8000,
   unscopedRegistrations: 5000
 } as const;
 
