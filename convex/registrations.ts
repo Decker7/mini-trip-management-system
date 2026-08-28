@@ -135,15 +135,18 @@ export const listAll = query({
 
     // Filtering (search/paymentStatus) happens in-memory below, so the fetch
     // must not truncate before filtering or a match outside the truncated
-    // window would silently disappear from filtered results. Convex's own
-    // per-query read limits still bound this — they surface as an explicit
-    // error rather than a silent gap, which is preferable here.
+    // window would silently disappear from filtered results. This bound is
+    // set high enough that it never truncates at this app's realistic scale,
+    // while staying well under Convex's per-query read ceiling so an
+    // unusually large table degrades to "may omit very old rows" rather than
+    // throwing and breaking the page outright.
+    const UNSCOPED_REGISTRATIONS_LIMIT = 5000;
     const registrations = args.tripId
       ? await ctx.db
           .query('registrations')
           .withIndex('by_trip', (q) => q.eq('tripId', args.tripId!))
           .collect()
-      : await ctx.db.query('registrations').order('desc').collect();
+      : await ctx.db.query('registrations').order('desc').take(UNSCOPED_REGISTRATIONS_LIMIT);
 
     const search = args.search?.trim().toLowerCase();
 
