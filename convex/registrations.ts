@@ -2,6 +2,7 @@ import { ConvexError, v } from 'convex/values';
 import { mutation, query } from './_generated/server';
 import type { Doc, Id } from './_generated/dataModel';
 import { requireIdentity } from './lib/identity';
+import { recordActivityLog } from './lib/activityLog';
 
 const paymentStatus = v.union(v.literal('unpaid'), v.literal('paid'), v.literal('refunded'));
 
@@ -133,7 +134,7 @@ export const register = mutation({
 export const cancel = mutation({
   args: { registrationId: v.id('registrations') },
   handler: async (ctx, args) => {
-    await requireIdentity(ctx);
+    const identity = await requireIdentity(ctx);
     const registration = await ctx.db.get(args.registrationId);
     if (!registration) {
       throw new ConvexError('Registration not found.');
@@ -142,18 +143,32 @@ export const cancel = mutation({
       throw new ConvexError('This Registration is already cancelled.');
     }
     await ctx.db.patch(args.registrationId, { registrationStatus: 'cancelled' });
+    await recordActivityLog(ctx, {
+      registrationId: args.registrationId,
+      field: 'registrationStatus',
+      oldValue: registration.registrationStatus,
+      newValue: 'cancelled',
+      changedBy: identity.subject
+    });
   }
 });
 
 export const setPaymentStatus = mutation({
   args: { registrationId: v.id('registrations'), paymentStatus },
   handler: async (ctx, args) => {
-    await requireIdentity(ctx);
+    const identity = await requireIdentity(ctx);
     const registration = await ctx.db.get(args.registrationId);
     if (!registration) {
       throw new ConvexError('Registration not found.');
     }
     await ctx.db.patch(args.registrationId, { paymentStatus: args.paymentStatus });
+    await recordActivityLog(ctx, {
+      registrationId: args.registrationId,
+      field: 'paymentStatus',
+      oldValue: registration.paymentStatus,
+      newValue: args.paymentStatus,
+      changedBy: identity.subject
+    });
   }
 });
 
