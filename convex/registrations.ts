@@ -133,12 +133,17 @@ export const listAll = query({
   handler: async (ctx, args) => {
     await requireIdentity(ctx);
 
+    // Filtering (search/paymentStatus) happens in-memory below, so the fetch
+    // must not truncate before filtering or a match outside the truncated
+    // window would silently disappear from filtered results. Convex's own
+    // per-query read limits still bound this — they surface as an explicit
+    // error rather than a silent gap, which is preferable here.
     const registrations = args.tripId
       ? await ctx.db
           .query('registrations')
           .withIndex('by_trip', (q) => q.eq('tripId', args.tripId!))
           .collect()
-      : await ctx.db.query('registrations').order('desc').take(1000);
+      : await ctx.db.query('registrations').order('desc').collect();
 
     const search = args.search?.trim().toLowerCase();
 
