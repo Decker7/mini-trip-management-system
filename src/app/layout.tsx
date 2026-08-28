@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils';
 import type { Metadata, Viewport } from 'next';
 import { cookies } from 'next/headers';
 import NextTopLoader from 'nextjs-toploader';
+import Script from 'next/script';
 import { NuqsAdapter } from 'nuqs/adapters/next/app';
 import '../styles/globals.css';
 
@@ -39,7 +40,14 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   return (
     <html lang='en' suppressHydrationWarning data-theme={themeToApply}>
       <head>
-        <script
+        {/* `beforeInteractive` hands this to Next's own head-management
+            system instead of sitting as a hand-placed child competing with
+            it — a raw `<script>` here can land out of hydration-match
+            position against Next's automatic head content, which is what
+            triggers React 19's "Encountered a script tag" warning. */}
+        <Script
+          id='set-meta-theme-color'
+          strategy='beforeInteractive'
           dangerouslySetInnerHTML={{
             __html: `
               try {
