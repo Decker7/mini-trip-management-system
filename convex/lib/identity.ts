@@ -27,3 +27,17 @@ export async function requireAdmin(ctx: MutationCtx) {
   }
   return identity;
 }
+
+/**
+ * Requires an identity with either role, rejecting one that is signed in but
+ * has no role assigned yet. `requireIdentity` alone doesn't check this, which
+ * is fine for most existing endpoints, but not for ones handling PII like a
+ * Participant's passport.
+ */
+export async function requireAssignedRole(ctx: QueryCtx | MutationCtx) {
+  const identity = await requireIdentity(ctx);
+  if (identity.role !== 'admin' && identity.role !== 'staff') {
+    throw new ConvexError('Your account has not been assigned a role yet.');
+  }
+  return identity;
+}

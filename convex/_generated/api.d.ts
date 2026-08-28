@@ -11,6 +11,7 @@
 import type * as activityLogs from '../activityLogs.js';
 import type * as lib_activityLog from '../lib/activityLog.js';
 import type * as lib_identity from '../lib/identity.js';
+import type * as participants from '../participants.js';
 import type * as registrations from '../registrations.js';
 import type * as trips from '../trips.js';
 import type * as users from '../users.js';
@@ -21,6 +22,7 @@ declare const fullApi: ApiFromModules<{
   activityLogs: typeof activityLogs;
   'lib/activityLog': typeof lib_activityLog;
   'lib/identity': typeof lib_identity;
+  participants: typeof participants;
   registrations: typeof registrations;
   trips: typeof trips;
   users: typeof users;

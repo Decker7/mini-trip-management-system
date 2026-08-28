@@ -154,7 +154,14 @@ export function ParticipantListing() {
               )}
               {registrations?.map((entry) => (
                 <TableRow key={entry._id}>
-                  <TableCell className='font-medium'>{entry.fullName}</TableCell>
+                  <TableCell className='font-medium'>
+                    <Link
+                      href={`/dashboard/participants/${entry.participantId}`}
+                      className='hover:underline'
+                    >
+                      {entry.fullName}
+                    </Link>
+                  </TableCell>
                   <TableCell>{entry.icPassportNumber}</TableCell>
                   <TableCell>
                     <Link href={`/dashboard/trips/${entry.tripId}`} className='hover:underline'>
