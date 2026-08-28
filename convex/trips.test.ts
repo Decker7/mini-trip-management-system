@@ -239,3 +239,21 @@ test('get returns a single trip with derived status, or null when missing', asyn
   const missing = await t.withIdentity(staff).query(api.trips.get, { tripId, today: '2026-09-12' });
   expect(missing).toBeNull();
 });
+
+test('remove rejects a Trip that has a Registration, cancelled or not', async () => {
+  const t = convexTest(schema, modules);
+  const tripId = await t.withIdentity(admin).mutation(api.trips.create, validTrip);
+  const registrationId = await t.withIdentity(staff).mutation(api.registrations.register, {
+    tripId,
+    fullName: 'Jane Doe',
+    icPassportNumber: 'A1234567',
+    email: 'jane@example.com',
+    phone: '+60123456789'
+  });
+
+  await expect(t.withIdentity(admin).mutation(api.trips.remove, { tripId })).rejects.toThrow();
+
+  await t.withIdentity(staff).mutation(api.registrations.cancel, { registrationId });
+
+  await expect(t.withIdentity(admin).mutation(api.trips.remove, { tripId })).rejects.toThrow();
+});
