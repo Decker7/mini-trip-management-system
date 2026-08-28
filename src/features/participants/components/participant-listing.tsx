@@ -41,12 +41,13 @@ export function ParticipantListing() {
   const debouncedSearch = useDebounce(params.search, 300);
 
   const trips = useQuery(api.trips.list, { today: todayDateOnlyString() });
-  const registrations = useQuery(api.registrations.listAll, {
+  const result = useQuery(api.registrations.listAll, {
     search: debouncedSearch || undefined,
     tripId: params.tripId ? (params.tripId as Id<'trips'>) : undefined,
     paymentStatus: params.paymentStatus ?? undefined
   });
 
+  const registrations = result?.rows;
   const columnCount = 6;
 
   return (
@@ -106,6 +107,16 @@ export function ParticipantListing() {
           </Select>
         </div>
       </div>
+
+      {result?.truncated && (
+        <div className='border-border text-muted-foreground flex items-center gap-2 rounded-lg border border-dashed px-3 py-2 text-sm'>
+          <Icons.warning className='h-4 w-4 shrink-0' />
+          <span>
+            Showing a partial list — there are more Participants than can be listed at once. Narrow
+            the search or filters to see the rest.
+          </span>
+        </div>
+      )}
 
       <Card>
         <CardContent className='p-0'>

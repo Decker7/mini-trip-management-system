@@ -306,8 +306,9 @@ test('listAll rejects an unauthenticated caller and returns every Registration a
   await expect(t.query(api.registrations.listAll, {})).rejects.toThrow();
 
   const all = await t.withIdentity(staff).query(api.registrations.listAll, {});
-  expect(all).toHaveLength(2);
-  const byName = Object.fromEntries(all.map((r) => [r.fullName, r.tripName]));
+  expect(all.truncated).toBe(false);
+  expect(all.rows).toHaveLength(2);
+  const byName = Object.fromEntries(all.rows.map((r) => [r.fullName, r.tripName]));
   expect(byName).toEqual({ 'Jane Doe': 'Bali Retreat', 'John Smith': 'Tokyo Tour' });
 });
 
@@ -328,10 +329,10 @@ test('listAll filters by search across name and IC/passport number', async () =>
   });
 
   const byName = await t.withIdentity(staff).query(api.registrations.listAll, { search: 'jane' });
-  expect(byName.map((r) => r.fullName)).toEqual(['Jane Doe']);
+  expect(byName.rows.map((r) => r.fullName)).toEqual(['Jane Doe']);
 
   const byIc = await t.withIdentity(staff).query(api.registrations.listAll, { search: 'c1111111' });
-  expect(byIc.map((r) => r.fullName)).toEqual(['John Smith']);
+  expect(byIc.rows.map((r) => r.fullName)).toEqual(['John Smith']);
 });
 
 test('listAll filters by tripId', async () => {
@@ -351,7 +352,7 @@ test('listAll filters by tripId', async () => {
   });
 
   const forTripA = await t.withIdentity(staff).query(api.registrations.listAll, { tripId: tripA });
-  expect(forTripA.map((r) => r.fullName)).toEqual(['Jane Doe']);
+  expect(forTripA.rows.map((r) => r.fullName)).toEqual(['Jane Doe']);
 });
 
 test('listAll filters by payment status', async () => {
@@ -377,7 +378,7 @@ test('listAll filters by payment status', async () => {
   const paid = await t
     .withIdentity(staff)
     .query(api.registrations.listAll, { paymentStatus: 'paid' });
-  expect(paid.map((r) => r.fullName)).toEqual(['Jane Doe']);
+  expect(paid.rows.map((r) => r.fullName)).toEqual(['Jane Doe']);
 });
 
 test('listAll returns every Trip a searched Participant is registered on', async () => {
@@ -393,8 +394,8 @@ test('listAll returns every Trip a searched Participant is registered on', async
     .mutation(api.registrations.register, { tripId: tripB, ...validParticipant });
 
   const found = await t.withIdentity(staff).query(api.registrations.listAll, { search: 'jane' });
-  expect(found).toHaveLength(2);
-  const tripNames = found.map((r) => r.tripName);
+  expect(found.rows).toHaveLength(2);
+  const tripNames = found.rows.map((r) => r.tripName);
   expect(tripNames).toContain('Bali Retreat');
   expect(tripNames).toContain('Tokyo Tour');
 });
@@ -414,8 +415,8 @@ test('listAll combines search with a Trip filter', async () => {
   const found = await t
     .withIdentity(staff)
     .query(api.registrations.listAll, { search: 'jane', tripId: tripB });
-  expect(found).toHaveLength(1);
-  expect(found[0]).toMatchObject({ fullName: 'Jane Doe', tripName: 'Tokyo Tour' });
+  expect(found.rows).toHaveLength(1);
+  expect(found.rows[0]).toMatchObject({ fullName: 'Jane Doe', tripName: 'Tokyo Tour' });
 });
 
 test('listAll combines search with a Payment Status filter', async () => {
@@ -436,8 +437,8 @@ test('listAll combines search with a Payment Status filter', async () => {
   const found = await t
     .withIdentity(staff)
     .query(api.registrations.listAll, { search: 'jane', paymentStatus: 'paid' });
-  expect(found).toHaveLength(1);
-  expect(found[0]).toMatchObject({ tripName: 'Bali Retreat', paymentStatus: 'paid' });
+  expect(found.rows).toHaveLength(1);
+  expect(found.rows[0]).toMatchObject({ tripName: 'Bali Retreat', paymentStatus: 'paid' });
 });
 
 test('listAll search matches on IC/passport substring, not just a prefix', async () => {
@@ -446,5 +447,19 @@ test('listAll search matches on IC/passport substring, not just a prefix', async
   await t.withIdentity(staff).mutation(api.registrations.register, { tripId, ...validParticipant });
 
   const found = await t.withIdentity(staff).query(api.registrations.listAll, { search: '23456' });
-  expect(found.map((r) => r.fullName)).toEqual(['Jane Doe']);
+  expect(found.rows.map((r) => r.fullName)).toEqual(['Jane Doe']);
+});
+
+test('listAll reports truncated=false when every matching row fits', async () => {
+  const t = convexTest(schema, modules);
+  const tripId = await createTrip(t);
+  await t.withIdentity(staff).mutation(api.registrations.register, { tripId, ...validParticipant });
+
+  // Each filter path reports its own completeness, so callers can trust a
+  // false here to mean "this is the whole answer".
+  for (const args of [{}, { search: 'jane' }, { tripId }, { paymentStatus: 'unpaid' as const }]) {
+    const result = await t.withIdentity(staff).query(api.registrations.listAll, args);
+    expect(result.truncated).toBe(false);
+    expect(result.rows.length).toBeGreaterThan(0);
+  }
 });
