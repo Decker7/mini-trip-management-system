@@ -54,6 +54,14 @@ export const navGroups: NavGroup[] = [
         access: { role: 'admin' }
       },
       {
+        title: 'Trips',
+        url: '/dashboard/trips',
+        icon: 'calendar',
+        shortcut: ['t', 't'],
+        isActive: false,
+        items: []
+      },
+      {
         title: 'Workspaces',
         url: '/dashboard/workspaces',
         icon: 'workspace',
