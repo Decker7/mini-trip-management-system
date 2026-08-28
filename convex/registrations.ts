@@ -151,45 +151,61 @@ export const listAll = query({
     // person-and-Trip pair for the life of the system — so this scans the
     // far smaller, far slower-growing table, and the rows it then reads are
     // only the ones that can actually match.
+    // Any cap that actually bites is reported back as `truncated`, so callers
+    // can say "these results are incomplete, narrow your filters" instead of
+    // presenting a short list as if it were the whole answer. Silently
+    // dropping matches is the failure mode worth avoiding here; a bounded
+    // read that admits it is bounded is not.
+    let truncated = false;
     let registrations;
     let participantById: Map<Id<'participants'>, Doc<'participants'> | null>;
 
     if (search) {
       const participants = await ctx.db.query('participants').take(PARTICIPANTS_SCAN_LIMIT);
+      truncated ||= participants.length === PARTICIPANTS_SCAN_LIMIT;
+
       // Cap the fan-out: one index read is issued per matched Participant, so
       // a very broad term ("a") must not turn into thousands of reads. A
       // search this wide isn't a lookup anyone is actually reading row by row
       // — narrowing the term is the useful response, not returning more.
-      const matches = participants
-        .filter(
-          (participant) =>
-            participant.fullName.toLowerCase().includes(search) ||
-            participant.icPassportNumber.toLowerCase().includes(search)
-        )
-        .slice(0, MATCHED_PARTICIPANTS_LIMIT);
+      const allMatches = participants.filter(
+        (participant) =>
+          participant.fullName.toLowerCase().includes(search) ||
+          participant.icPassportNumber.toLowerCase().includes(search)
+      );
+      truncated ||= allMatches.length > MATCHED_PARTICIPANTS_LIMIT;
+      const matches = allMatches.slice(0, MATCHED_PARTICIPANTS_LIMIT);
+
       participantById = new Map(matches.map((participant) => [participant._id, participant]));
-      registrations = (
-        await Promise.all(
-          matches.map((participant) =>
-            ctx.db
-              .query('registrations')
-              .withIndex('by_participant', (q) => q.eq('participantId', participant._id))
-              .take(REGISTRATIONS_PER_PARTICIPANT_LIMIT)
-          )
+      const perParticipant = await Promise.all(
+        matches.map((participant) =>
+          ctx.db
+            .query('registrations')
+            .withIndex('by_participant', (q) => q.eq('participantId', participant._id))
+            .take(REGISTRATIONS_PER_PARTICIPANT_LIMIT)
         )
-      ).flat();
+      );
+      truncated ||= perParticipant.some(
+        (rows) => rows.length === REGISTRATIONS_PER_PARTICIPANT_LIMIT
+      );
+      registrations = perParticipant.flat();
     } else {
+      const limit =
+        args.tripId || args.paymentStatus
+          ? SCOPED_REGISTRATIONS_LIMIT
+          : UNSCOPED_REGISTRATIONS_LIMIT;
       registrations = args.tripId
         ? await ctx.db
             .query('registrations')
             .withIndex('by_trip', (q) => q.eq('tripId', args.tripId!))
-            .take(SCOPED_REGISTRATIONS_LIMIT)
+            .take(limit)
         : args.paymentStatus
           ? await ctx.db
               .query('registrations')
               .withIndex('by_paymentStatus', (q) => q.eq('paymentStatus', args.paymentStatus!))
-              .take(SCOPED_REGISTRATIONS_LIMIT)
-          : await ctx.db.query('registrations').order('desc').take(UNSCOPED_REGISTRATIONS_LIMIT);
+              .take(limit)
+          : await ctx.db.query('registrations').order('desc').take(limit);
+      truncated ||= registrations.length === limit;
       participantById = new Map();
     }
 
@@ -216,7 +232,7 @@ export const listAll = query({
       participantById.set(participantId, fetchedParticipants[index]);
     });
 
-    return filtered.map((registration) => {
+    const rows = filtered.map((registration) => {
       const trip = tripById.get(registration.tripId);
       const participant = participantById.get(registration.participantId);
       return {
@@ -233,6 +249,8 @@ export const listAll = query({
         registeredAt: registration.registeredAt
       };
     });
+
+    return { rows, truncated };
   }
 });
 
