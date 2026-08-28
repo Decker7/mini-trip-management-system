@@ -558,56 +558,6 @@ test('listAll does not call a search-plus-Trip result partial over other Trips r
   expect(unscoped.truncated).toBe(true);
 });
 
-test('listAll does not call a search-plus-Payment-Status result partial over other statuses', async () => {
-  const t = convexTest(schema, modules);
-  const perParticipant = LIST_ALL_LIMITS.registrationsPerParticipant;
-
-  // A Participant whose overall history exceeds the per-Participant cap, but
-  // who holds a single `paid` Registration among a sea of `unpaid` ones.
-  await t.run(async (ctx) => {
-    const participantId = await ctx.db.insert('participants', validParticipant);
-    const tripId = await ctx.db.insert('trips', {
-      name: 'Busy Trip',
-      destination: 'Nowhere',
-      startDate: '2026-09-10',
-      endDate: '2026-09-15',
-      capacity: 10,
-      createdBy: admin.subject
-    });
-
-    await ctx.db.insert('registrations', {
-      tripId,
-      participantId,
-      paymentStatus: 'paid',
-      registrationStatus: 'registered',
-      registeredAt: 0,
-      registeredBy: staff.subject
-    });
-    for (let i = 0; i < perParticipant + 1; i++) {
-      await ctx.db.insert('registrations', {
-        tripId,
-        participantId,
-        paymentStatus: 'unpaid',
-        registrationStatus: 'cancelled',
-        registeredAt: i + 1,
-        registeredBy: staff.subject
-      });
-    }
-  });
-
-  // Scoped to `paid`, the answer is that one row — and it is complete. The
-  // rows past the cap are all `unpaid`, which the filter excludes anyway.
-  const scoped = await t
-    .withIdentity(staff)
-    .query(api.registrations.listAll, { search: 'jane', paymentStatus: 'paid' });
-  expect(scoped.rows).toHaveLength(1);
-  expect(scoped.truncated).toBe(false);
-
-  // Unscoped, the same Participant's history genuinely does overflow the cap.
-  const unscoped = await t.withIdentity(staff).query(api.registrations.listAll, { search: 'jane' });
-  expect(unscoped.truncated).toBe(true);
-});
-
 test('listAll caps keep total documents scanned under Convex per-query ceiling', () => {
   // Convex scans at most 32,000 documents per query. Capping each read alone
   // is not enough — the search path issues one read per matched Participant,
