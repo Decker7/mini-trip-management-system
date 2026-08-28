@@ -133,27 +133,31 @@ export const listAll = query({
   handler: async (ctx, args) => {
     await requireIdentity(ctx);
 
-    // A tripId or paymentStatus filter narrows via an index first, so those
-    // paths are complete at any scale. Only the fully-unscoped case (no
-    // tripId, no paymentStatus — search alone, or no filters at all) falls
-    // back to a bounded scan: search matches participants by substring,
-    // which Convex can't push into an index, so it can't be narrowed the
-    // same way without building full-text search infrastructure. The bound
-    // below is set high enough to never truncate at this app's realistic
-    // scale, while staying well under Convex's per-query read ceiling so an
+    // Every path below is an explicit take(), never a bare collect() — no
+    // read here can exceed Convex's per-query read ceiling regardless of how
+    // large the underlying table grows. A tripId or paymentStatus filter
+    // narrows via an index first, so those paths only pay this cost in the
+    // (currently unrealistic) case of a single Trip or a single Payment
+    // Status status accumulating tens of thousands of Registrations. The
+    // fully-unscoped case (no tripId, no paymentStatus — search alone, or no
+    // filters at all) can't narrow the same way: search matches Participants
+    // by substring, which Convex can't push into an index without full-text
+    // search infrastructure, out of scope for this ticket. Every bound below
+    // is set high enough to never truncate at this app's realistic scale; an
     // unusually large table degrades to "may omit very old rows" rather than
     // throwing and breaking the page outright.
+    const SCOPED_REGISTRATIONS_LIMIT = 20000;
     const UNSCOPED_REGISTRATIONS_LIMIT = 5000;
     const registrations = args.tripId
       ? await ctx.db
           .query('registrations')
           .withIndex('by_trip', (q) => q.eq('tripId', args.tripId!))
-          .collect()
+          .take(SCOPED_REGISTRATIONS_LIMIT)
       : args.paymentStatus
         ? await ctx.db
             .query('registrations')
             .withIndex('by_paymentStatus', (q) => q.eq('paymentStatus', args.paymentStatus!))
-            .collect()
+            .take(SCOPED_REGISTRATIONS_LIMIT)
         : await ctx.db.query('registrations').order('desc').take(UNSCOPED_REGISTRATIONS_LIMIT);
 
     const search = args.search?.trim().toLowerCase();
