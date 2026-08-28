@@ -82,6 +82,30 @@ test('register reuses an existing Participant matched by icPassportNumber', asyn
   expect(participantCount).toHaveLength(1);
 });
 
+test("register refreshes an existing Participant's contact details on reuse", async () => {
+  const t = convexTest(schema, modules);
+  const tripA = await createTrip(t, { name: 'Trip A' });
+  const tripB = await createTrip(t, { name: 'Trip B' });
+
+  const regA = await t
+    .withIdentity(staff)
+    .mutation(api.registrations.register, { tripId: tripA, ...validParticipant });
+
+  const updatedDetails = {
+    ...validParticipant,
+    fullName: 'Jane D. Doe',
+    email: 'jane.doe@example.com',
+    phone: '+60199999999'
+  };
+  await t
+    .withIdentity(staff)
+    .mutation(api.registrations.register, { tripId: tripB, ...updatedDetails });
+
+  const registrationA = await t.run((ctx) => ctx.db.get(regA));
+  const participant = await t.run((ctx) => ctx.db.get(registrationA!.participantId));
+  expect(participant).toMatchObject(updatedDetails);
+});
+
 test('register rejects a duplicate active Registration for the same Trip', async () => {
   const t = convexTest(schema, modules);
   const tripId = await createTrip(t);
