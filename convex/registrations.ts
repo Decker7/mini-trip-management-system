@@ -139,6 +139,7 @@ export const listAll = query({
     // Every read below is an explicit take(), so no single path can exceed
     // Convex's per-query read ceiling however large the tables grow.
     const PARTICIPANTS_SCAN_LIMIT = 20000;
+    const MATCHED_PARTICIPANTS_LIMIT = 500;
     const REGISTRATIONS_PER_PARTICIPANT_LIMIT = 500;
     const SCOPED_REGISTRATIONS_LIMIT = 20000;
     const UNSCOPED_REGISTRATIONS_LIMIT = 5000;
@@ -155,11 +156,17 @@ export const listAll = query({
 
     if (search) {
       const participants = await ctx.db.query('participants').take(PARTICIPANTS_SCAN_LIMIT);
-      const matches = participants.filter(
-        (participant) =>
-          participant.fullName.toLowerCase().includes(search) ||
-          participant.icPassportNumber.toLowerCase().includes(search)
-      );
+      // Cap the fan-out: one index read is issued per matched Participant, so
+      // a very broad term ("a") must not turn into thousands of reads. A
+      // search this wide isn't a lookup anyone is actually reading row by row
+      // — narrowing the term is the useful response, not returning more.
+      const matches = participants
+        .filter(
+          (participant) =>
+            participant.fullName.toLowerCase().includes(search) ||
+            participant.icPassportNumber.toLowerCase().includes(search)
+        )
+        .slice(0, MATCHED_PARTICIPANTS_LIMIT);
       participantById = new Map(matches.map((participant) => [participant._id, participant]));
       registrations = (
         await Promise.all(
