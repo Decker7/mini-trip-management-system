@@ -5,6 +5,38 @@ import { requireIdentity } from './lib/identity';
 
 const paymentStatus = v.union(v.literal('unpaid'), v.literal('paid'), v.literal('refunded'));
 
+/**
+ * Read caps for `listAll`. Exported so tests can exercise the exact-limit
+ * boundary without hard-coding the numbers.
+ *
+ * Convex scans at most 32,000 documents per query, and rows dropped by a
+ * filter still count. These caps are budgeted so the *aggregate* of every
+ * read on a single call stays well under that — capping each read alone is
+ * not enough, because the search path issues one read per matched
+ * Participant and those multiply:
+ *
+ *   search path   participantsScan 10,000
+ *                 + matchedParticipants 200 x (registrationsPerParticipant 30 + 1) = 6,200
+ *                 + up to 6,200 Trip lookups for the join
+ *                 ~= 22,400
+ *
+ *   scoped path   scopedRegistrations 8,000
+ *                 + up to 8,000 Trip and 8,000 Participant lookups
+ *                 ~= 24,000
+ *
+ *   unscoped      unscopedRegistrations 5,000 + up to 10,000 join lookups
+ *                 ~= 15,000
+ *
+ * Raising any of these means redoing that arithmetic, not just the one line.
+ */
+export const LIST_ALL_LIMITS = {
+  participantsScan: 10000,
+  matchedParticipants: 200,
+  registrationsPerParticipant: 30,
+  scopedRegistrations: 8000,
+  unscopedRegistrations: 5000
+} as const;
+
 function validateParticipantFields(args: {
   fullName: string;
   icPassportNumber: string;
@@ -138,11 +170,13 @@ export const listAll = query({
 
     // Every read below is an explicit take(), so no single path can exceed
     // Convex's per-query read ceiling however large the tables grow.
-    const PARTICIPANTS_SCAN_LIMIT = 20000;
-    const MATCHED_PARTICIPANTS_LIMIT = 500;
-    const REGISTRATIONS_PER_PARTICIPANT_LIMIT = 500;
-    const SCOPED_REGISTRATIONS_LIMIT = 20000;
-    const UNSCOPED_REGISTRATIONS_LIMIT = 5000;
+    const {
+      participantsScan: PARTICIPANTS_SCAN_LIMIT,
+      matchedParticipants: MATCHED_PARTICIPANTS_LIMIT,
+      registrationsPerParticipant: REGISTRATIONS_PER_PARTICIPANT_LIMIT,
+      scopedRegistrations: SCOPED_REGISTRATIONS_LIMIT,
+      unscopedRegistrations: UNSCOPED_REGISTRATIONS_LIMIT
+    } = LIST_ALL_LIMITS;
 
     // `search` matches Participant fields, so resolve Participants first and
     // walk into their Registrations by index, rather than scanning
@@ -151,45 +185,95 @@ export const listAll = query({
     // person-and-Trip pair for the life of the system — so this scans the
     // far smaller, far slower-growing table, and the rows it then reads are
     // only the ones that can actually match.
+    // A cap that actually bites is reported back as `truncated`, so callers can
+    // say "these results are incomplete, narrow your filters" instead of
+    // presenting a short list as if it were the whole answer. `truncated` means
+    // strictly "rows existed that this query never examined, and any of them
+    // could have matched" — so it stays accurate through the filtering below,
+    // which can only ever narrow what was examined.
+    //
+    // Every capped read asks for one row more than it needs and reports
+    // truncation only when that extra row comes back. Reading exactly `limit`
+    // rows is ambiguous — it could mean "exactly limit exist" (complete) or
+    // "more exist, cut off here" (truncated) — and treating that as truncated
+    // would cry wolf on datasets that happen to land on the cap.
+    let truncated = false;
     let registrations;
     let participantById: Map<Id<'participants'>, Doc<'participants'> | null>;
 
     if (search) {
-      const participants = await ctx.db.query('participants').take(PARTICIPANTS_SCAN_LIMIT);
+      const scanned = await ctx.db.query('participants').take(PARTICIPANTS_SCAN_LIMIT + 1);
+      truncated ||= scanned.length > PARTICIPANTS_SCAN_LIMIT;
+      const participants = scanned.slice(0, PARTICIPANTS_SCAN_LIMIT);
+
       // Cap the fan-out: one index read is issued per matched Participant, so
       // a very broad term ("a") must not turn into thousands of reads. A
       // search this wide isn't a lookup anyone is actually reading row by row
       // — narrowing the term is the useful response, not returning more.
-      const matches = participants
-        .filter(
-          (participant) =>
-            participant.fullName.toLowerCase().includes(search) ||
-            participant.icPassportNumber.toLowerCase().includes(search)
-        )
-        .slice(0, MATCHED_PARTICIPANTS_LIMIT);
+      const allMatches = participants.filter(
+        (participant) =>
+          participant.fullName.toLowerCase().includes(search) ||
+          participant.icPassportNumber.toLowerCase().includes(search)
+      );
+      truncated ||= allMatches.length > MATCHED_PARTICIPANTS_LIMIT;
+      const matches = allMatches.slice(0, MATCHED_PARTICIPANTS_LIMIT);
+
       participantById = new Map(matches.map((participant) => [participant._id, participant]));
-      registrations = (
-        await Promise.all(
-          matches.map((participant) =>
-            ctx.db
-              .query('registrations')
-              .withIndex('by_participant', (q) => q.eq('participantId', participant._id))
-              .take(REGISTRATIONS_PER_PARTICIPANT_LIMIT)
-          )
+      // Push whichever filter is active down into the index rather than
+      // reading a Participant's whole history and discarding rows afterwards.
+      // Each read then returns only rows that can survive into the result, so
+      // this cap is not reachable off rows the filter was always going to
+      // drop — which is what would otherwise mark a complete filtered result
+      // as partial.
+      const perParticipant = await Promise.all(
+        matches.map((participant) =>
+          args.tripId
+            ? ctx.db
+                .query('registrations')
+                .withIndex('by_trip_and_participant', (q) =>
+                  q.eq('tripId', args.tripId!).eq('participantId', participant._id)
+                )
+                .take(REGISTRATIONS_PER_PARTICIPANT_LIMIT + 1)
+            : args.paymentStatus
+              ? ctx.db
+                  .query('registrations')
+                  .withIndex('by_participant_and_paymentStatus', (q) =>
+                    q.eq('participantId', participant._id).eq('paymentStatus', args.paymentStatus!)
+                  )
+                  .take(REGISTRATIONS_PER_PARTICIPANT_LIMIT + 1)
+              : ctx.db
+                  .query('registrations')
+                  .withIndex('by_participant', (q) => q.eq('participantId', participant._id))
+                  .take(REGISTRATIONS_PER_PARTICIPANT_LIMIT + 1)
         )
-      ).flat();
+      );
+      truncated ||= perParticipant.some(
+        (rows) => rows.length > REGISTRATIONS_PER_PARTICIPANT_LIMIT
+      );
+      registrations = perParticipant.flatMap((rows) =>
+        rows.slice(0, REGISTRATIONS_PER_PARTICIPANT_LIMIT)
+      );
     } else {
-      registrations = args.tripId
+      const limit =
+        args.tripId || args.paymentStatus
+          ? SCOPED_REGISTRATIONS_LIMIT
+          : UNSCOPED_REGISTRATIONS_LIMIT;
+      const scanned = args.tripId
         ? await ctx.db
             .query('registrations')
             .withIndex('by_trip', (q) => q.eq('tripId', args.tripId!))
-            .take(SCOPED_REGISTRATIONS_LIMIT)
+            .take(limit + 1)
         : args.paymentStatus
           ? await ctx.db
               .query('registrations')
               .withIndex('by_paymentStatus', (q) => q.eq('paymentStatus', args.paymentStatus!))
-              .take(SCOPED_REGISTRATIONS_LIMIT)
-          : await ctx.db.query('registrations').order('desc').take(UNSCOPED_REGISTRATIONS_LIMIT);
+              .take(limit + 1)
+          : await ctx.db
+              .query('registrations')
+              .order('desc')
+              .take(limit + 1);
+      truncated ||= scanned.length > limit;
+      registrations = scanned.slice(0, limit);
       participantById = new Map();
     }
 
@@ -216,7 +300,7 @@ export const listAll = query({
       participantById.set(participantId, fetchedParticipants[index]);
     });
 
-    return filtered.map((registration) => {
+    const rows = filtered.map((registration) => {
       const trip = tripById.get(registration.tripId);
       const participant = participantById.get(registration.participantId);
       return {
@@ -233,6 +317,8 @@ export const listAll = query({
         registeredAt: registration.registeredAt
       };
     });
+
+    return { rows, truncated };
   }
 });
 

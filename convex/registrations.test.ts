@@ -3,6 +3,7 @@ import { convexTest } from 'convex-test';
 import { expect, test } from 'vitest';
 import { api } from './_generated/api';
 import schema from './schema';
+import { LIST_ALL_LIMITS } from './registrations';
 
 const modules = import.meta.glob('./**/*.ts');
 
@@ -306,8 +307,9 @@ test('listAll rejects an unauthenticated caller and returns every Registration a
   await expect(t.query(api.registrations.listAll, {})).rejects.toThrow();
 
   const all = await t.withIdentity(staff).query(api.registrations.listAll, {});
-  expect(all).toHaveLength(2);
-  const byName = Object.fromEntries(all.map((r) => [r.fullName, r.tripName]));
+  expect(all.truncated).toBe(false);
+  expect(all.rows).toHaveLength(2);
+  const byName = Object.fromEntries(all.rows.map((r) => [r.fullName, r.tripName]));
   expect(byName).toEqual({ 'Jane Doe': 'Bali Retreat', 'John Smith': 'Tokyo Tour' });
 });
 
@@ -328,10 +330,10 @@ test('listAll filters by search across name and IC/passport number', async () =>
   });
 
   const byName = await t.withIdentity(staff).query(api.registrations.listAll, { search: 'jane' });
-  expect(byName.map((r) => r.fullName)).toEqual(['Jane Doe']);
+  expect(byName.rows.map((r) => r.fullName)).toEqual(['Jane Doe']);
 
   const byIc = await t.withIdentity(staff).query(api.registrations.listAll, { search: 'c1111111' });
-  expect(byIc.map((r) => r.fullName)).toEqual(['John Smith']);
+  expect(byIc.rows.map((r) => r.fullName)).toEqual(['John Smith']);
 });
 
 test('listAll filters by tripId', async () => {
@@ -351,7 +353,7 @@ test('listAll filters by tripId', async () => {
   });
 
   const forTripA = await t.withIdentity(staff).query(api.registrations.listAll, { tripId: tripA });
-  expect(forTripA.map((r) => r.fullName)).toEqual(['Jane Doe']);
+  expect(forTripA.rows.map((r) => r.fullName)).toEqual(['Jane Doe']);
 });
 
 test('listAll filters by payment status', async () => {
@@ -377,7 +379,7 @@ test('listAll filters by payment status', async () => {
   const paid = await t
     .withIdentity(staff)
     .query(api.registrations.listAll, { paymentStatus: 'paid' });
-  expect(paid.map((r) => r.fullName)).toEqual(['Jane Doe']);
+  expect(paid.rows.map((r) => r.fullName)).toEqual(['Jane Doe']);
 });
 
 test('listAll returns every Trip a searched Participant is registered on', async () => {
@@ -393,8 +395,8 @@ test('listAll returns every Trip a searched Participant is registered on', async
     .mutation(api.registrations.register, { tripId: tripB, ...validParticipant });
 
   const found = await t.withIdentity(staff).query(api.registrations.listAll, { search: 'jane' });
-  expect(found).toHaveLength(2);
-  const tripNames = found.map((r) => r.tripName);
+  expect(found.rows).toHaveLength(2);
+  const tripNames = found.rows.map((r) => r.tripName);
   expect(tripNames).toContain('Bali Retreat');
   expect(tripNames).toContain('Tokyo Tour');
 });
@@ -414,8 +416,8 @@ test('listAll combines search with a Trip filter', async () => {
   const found = await t
     .withIdentity(staff)
     .query(api.registrations.listAll, { search: 'jane', tripId: tripB });
-  expect(found).toHaveLength(1);
-  expect(found[0]).toMatchObject({ fullName: 'Jane Doe', tripName: 'Tokyo Tour' });
+  expect(found.rows).toHaveLength(1);
+  expect(found.rows[0]).toMatchObject({ fullName: 'Jane Doe', tripName: 'Tokyo Tour' });
 });
 
 test('listAll combines search with a Payment Status filter', async () => {
@@ -436,8 +438,8 @@ test('listAll combines search with a Payment Status filter', async () => {
   const found = await t
     .withIdentity(staff)
     .query(api.registrations.listAll, { search: 'jane', paymentStatus: 'paid' });
-  expect(found).toHaveLength(1);
-  expect(found[0]).toMatchObject({ tripName: 'Bali Retreat', paymentStatus: 'paid' });
+  expect(found.rows).toHaveLength(1);
+  expect(found.rows[0]).toMatchObject({ tripName: 'Bali Retreat', paymentStatus: 'paid' });
 });
 
 test('listAll search matches on IC/passport substring, not just a prefix', async () => {
@@ -446,5 +448,204 @@ test('listAll search matches on IC/passport substring, not just a prefix', async
   await t.withIdentity(staff).mutation(api.registrations.register, { tripId, ...validParticipant });
 
   const found = await t.withIdentity(staff).query(api.registrations.listAll, { search: '23456' });
-  expect(found.map((r) => r.fullName)).toEqual(['Jane Doe']);
+  expect(found.rows.map((r) => r.fullName)).toEqual(['Jane Doe']);
+});
+
+test('listAll does not report truncation for a dataset sitting exactly on the cap', async () => {
+  const t = convexTest(schema, modules);
+  const limit = LIST_ALL_LIMITS.unscopedRegistrations;
+
+  // Seed exactly `limit` Registrations directly, bypassing the register
+  // mutation's Trip/Capacity rules — this is about the read cap, not
+  // registration validation.
+  const { tripId, participantId } = await t.run(async (ctx) => {
+    const tripId = await ctx.db.insert('trips', {
+      name: 'Cap Trip',
+      destination: 'Nowhere',
+      startDate: '2026-09-10',
+      endDate: '2026-09-15',
+      capacity: limit + 1,
+      createdBy: admin.subject
+    });
+    const participantId = await ctx.db.insert('participants', validParticipant);
+    for (let i = 0; i < limit; i++) {
+      await ctx.db.insert('registrations', {
+        tripId,
+        participantId,
+        paymentStatus: 'unpaid',
+        registrationStatus: 'registered',
+        registeredAt: i,
+        registeredBy: staff.subject
+      });
+    }
+    return { tripId, participantId };
+  });
+
+  // Exactly at the cap is a complete answer, not a clipped one.
+  const atCap = await t.withIdentity(staff).query(api.registrations.listAll, {});
+  expect(atCap.rows).toHaveLength(limit);
+  expect(atCap.truncated).toBe(false);
+
+  // One row beyond it genuinely is clipped.
+  await t.run(async (ctx) => {
+    await ctx.db.insert('registrations', {
+      tripId,
+      participantId,
+      paymentStatus: 'unpaid',
+      registrationStatus: 'registered',
+      registeredAt: limit,
+      registeredBy: staff.subject
+    });
+  });
+
+  const overCap = await t.withIdentity(staff).query(api.registrations.listAll, {});
+  expect(overCap.rows).toHaveLength(limit);
+  expect(overCap.truncated).toBe(true);
+});
+
+test('listAll does not call a search-plus-Trip result partial over other Trips rows', async () => {
+  const t = convexTest(schema, modules);
+  const perParticipant = LIST_ALL_LIMITS.registrationsPerParticipant;
+
+  // One Participant whose overall history exceeds the per-Participant cap,
+  // but who holds a single Registration on the Trip being filtered to.
+  const { targetTripId } = await t.run(async (ctx) => {
+    const participantId = await ctx.db.insert('participants', validParticipant);
+    const makeTrip = (name: string) =>
+      ctx.db.insert('trips', {
+        name,
+        destination: 'Nowhere',
+        startDate: '2026-09-10',
+        endDate: '2026-09-15',
+        capacity: 10,
+        createdBy: admin.subject
+      });
+
+    const targetTripId = await makeTrip('Target Trip');
+    await ctx.db.insert('registrations', {
+      tripId: targetTripId,
+      participantId,
+      paymentStatus: 'unpaid',
+      registrationStatus: 'registered',
+      registeredAt: 0,
+      registeredBy: staff.subject
+    });
+
+    const otherTripId = await makeTrip('Other Trip');
+    for (let i = 0; i < perParticipant + 1; i++) {
+      await ctx.db.insert('registrations', {
+        tripId: otherTripId,
+        participantId,
+        paymentStatus: 'unpaid',
+        registrationStatus: 'cancelled',
+        registeredAt: i + 1,
+        registeredBy: staff.subject
+      });
+    }
+    return { targetTripId };
+  });
+
+  // Scoped to the Trip, the answer is that one row — and it is complete. The
+  // rows past the cap all belong to a Trip the filter excludes anyway.
+  const scoped = await t
+    .withIdentity(staff)
+    .query(api.registrations.listAll, { search: 'jane', tripId: targetTripId });
+  expect(scoped.rows).toHaveLength(1);
+  expect(scoped.truncated).toBe(false);
+
+  // Unscoped, the same Participant's history genuinely does overflow the cap.
+  const unscoped = await t.withIdentity(staff).query(api.registrations.listAll, { search: 'jane' });
+  expect(unscoped.truncated).toBe(true);
+});
+
+test('listAll does not call a search-plus-Payment-Status result partial over other statuses', async () => {
+  const t = convexTest(schema, modules);
+  const perParticipant = LIST_ALL_LIMITS.registrationsPerParticipant;
+
+  // A Participant whose overall history exceeds the per-Participant cap, but
+  // who holds a single `paid` Registration among a sea of `unpaid` ones.
+  await t.run(async (ctx) => {
+    const participantId = await ctx.db.insert('participants', validParticipant);
+    const tripId = await ctx.db.insert('trips', {
+      name: 'Busy Trip',
+      destination: 'Nowhere',
+      startDate: '2026-09-10',
+      endDate: '2026-09-15',
+      capacity: 10,
+      createdBy: admin.subject
+    });
+
+    await ctx.db.insert('registrations', {
+      tripId,
+      participantId,
+      paymentStatus: 'paid',
+      registrationStatus: 'registered',
+      registeredAt: 0,
+      registeredBy: staff.subject
+    });
+    for (let i = 0; i < perParticipant + 1; i++) {
+      await ctx.db.insert('registrations', {
+        tripId,
+        participantId,
+        paymentStatus: 'unpaid',
+        registrationStatus: 'cancelled',
+        registeredAt: i + 1,
+        registeredBy: staff.subject
+      });
+    }
+  });
+
+  // Scoped to `paid`, the answer is that one row — and it is complete. The
+  // rows past the cap are all `unpaid`, which the filter excludes anyway.
+  const scoped = await t
+    .withIdentity(staff)
+    .query(api.registrations.listAll, { search: 'jane', paymentStatus: 'paid' });
+  expect(scoped.rows).toHaveLength(1);
+  expect(scoped.truncated).toBe(false);
+
+  // Unscoped, the same Participant's history genuinely does overflow the cap.
+  const unscoped = await t.withIdentity(staff).query(api.registrations.listAll, { search: 'jane' });
+  expect(unscoped.truncated).toBe(true);
+});
+
+test('listAll caps keep total documents scanned under Convex per-query ceiling', () => {
+  // Convex scans at most 32,000 documents per query. Capping each read alone
+  // is not enough — the search path issues one read per matched Participant,
+  // so the caps multiply. This pins the aggregate arithmetic so raising any
+  // single cap can't quietly push a real query over the ceiling.
+  const CONVEX_DOCUMENTS_SCANNED_CEILING = 32000;
+  const {
+    participantsScan,
+    matchedParticipants,
+    registrationsPerParticipant,
+    scopedRegistrations,
+    unscopedRegistrations
+  } = LIST_ALL_LIMITS;
+
+  // Search: scan Participants, then one capped read per match, then a Trip
+  // lookup per resulting row (Participants are already in memory).
+  const searchRows = matchedParticipants * (registrationsPerParticipant + 1);
+  const searchWorstCase = participantsScan + searchRows + searchRows;
+
+  // Non-search: read Registrations, then a Trip and a Participant per row.
+  const scopedWorstCase = scopedRegistrations + 2 * scopedRegistrations;
+  const unscopedWorstCase = unscopedRegistrations + 2 * unscopedRegistrations;
+
+  expect(searchWorstCase).toBeLessThan(CONVEX_DOCUMENTS_SCANNED_CEILING);
+  expect(scopedWorstCase).toBeLessThan(CONVEX_DOCUMENTS_SCANNED_CEILING);
+  expect(unscopedWorstCase).toBeLessThan(CONVEX_DOCUMENTS_SCANNED_CEILING);
+});
+
+test('listAll reports truncated=false when every matching row fits', async () => {
+  const t = convexTest(schema, modules);
+  const tripId = await createTrip(t);
+  await t.withIdentity(staff).mutation(api.registrations.register, { tripId, ...validParticipant });
+
+  // Each filter path reports its own completeness, so callers can trust a
+  // false here to mean "this is the whole answer".
+  for (const args of [{}, { search: 'jane' }, { tripId }, { paymentStatus: 'unpaid' as const }]) {
+    const result = await t.withIdentity(staff).query(api.registrations.listAll, args);
+    expect(result.truncated).toBe(false);
+    expect(result.rows.length).toBeGreaterThan(0);
+  }
 });
