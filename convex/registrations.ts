@@ -219,12 +219,12 @@ export const listAll = query({
       const matches = allMatches.slice(0, MATCHED_PARTICIPANTS_LIMIT);
 
       participantById = new Map(matches.map((participant) => [participant._id, participant]));
-      // With a Trip selected, read straight from the (tripId, participantId)
-      // index instead of pulling a Participant's whole history and filtering
-      // after. That returns only the rows that can survive into the result, so
-      // this cap stops being reachable for search-plus-Trip — the combination
-      // that would otherwise report "partial" off rows the Trip filter was
-      // always going to discard.
+      // Push whichever filter is active down into the index rather than
+      // reading a Participant's whole history and discarding rows afterwards.
+      // Each read then returns only rows that can survive into the result, so
+      // this cap is not reachable off rows the filter was always going to
+      // drop — which is what would otherwise mark a complete filtered result
+      // as partial.
       const perParticipant = await Promise.all(
         matches.map((participant) =>
           args.tripId
@@ -234,10 +234,17 @@ export const listAll = query({
                   q.eq('tripId', args.tripId!).eq('participantId', participant._id)
                 )
                 .take(REGISTRATIONS_PER_PARTICIPANT_LIMIT + 1)
-            : ctx.db
-                .query('registrations')
-                .withIndex('by_participant', (q) => q.eq('participantId', participant._id))
-                .take(REGISTRATIONS_PER_PARTICIPANT_LIMIT + 1)
+            : args.paymentStatus
+              ? ctx.db
+                  .query('registrations')
+                  .withIndex('by_participant_and_paymentStatus', (q) =>
+                    q.eq('participantId', participant._id).eq('paymentStatus', args.paymentStatus!)
+                  )
+                  .take(REGISTRATIONS_PER_PARTICIPANT_LIMIT + 1)
+              : ctx.db
+                  .query('registrations')
+                  .withIndex('by_participant', (q) => q.eq('participantId', participant._id))
+                  .take(REGISTRATIONS_PER_PARTICIPANT_LIMIT + 1)
         )
       );
       truncated ||= perParticipant.some(
