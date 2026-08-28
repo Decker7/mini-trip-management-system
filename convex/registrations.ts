@@ -1,5 +1,6 @@
 import { ConvexError, v } from 'convex/values';
 import { mutation, query } from './_generated/server';
+import type { Doc, Id } from './_generated/dataModel';
 import { requireIdentity } from './lib/identity';
 
 const paymentStatus = v.union(v.literal('unpaid'), v.literal('paid'), v.literal('refunded'));
@@ -133,70 +134,98 @@ export const listAll = query({
   handler: async (ctx, args) => {
     await requireIdentity(ctx);
 
-    // Every path below is an explicit take(), never a bare collect() — no
-    // read here can exceed Convex's per-query read ceiling regardless of how
-    // large the underlying table grows. A tripId or paymentStatus filter
-    // narrows via an index first, so those paths only pay this cost in the
-    // (currently unrealistic) case of a single Trip or a single Payment
-    // Status status accumulating tens of thousands of Registrations. The
-    // fully-unscoped case (no tripId, no paymentStatus — search alone, or no
-    // filters at all) can't narrow the same way: search matches Participants
-    // by substring, which Convex can't push into an index without full-text
-    // search infrastructure, out of scope for this ticket. Every bound below
-    // is set high enough to never truncate at this app's realistic scale; an
-    // unusually large table degrades to "may omit very old rows" rather than
-    // throwing and breaking the page outright.
-    const SCOPED_REGISTRATIONS_LIMIT = 20000;
-    const UNSCOPED_REGISTRATIONS_LIMIT = 5000;
-    const registrations = args.tripId
-      ? await ctx.db
-          .query('registrations')
-          .withIndex('by_trip', (q) => q.eq('tripId', args.tripId!))
-          .take(SCOPED_REGISTRATIONS_LIMIT)
-      : args.paymentStatus
-        ? await ctx.db
-            .query('registrations')
-            .withIndex('by_paymentStatus', (q) => q.eq('paymentStatus', args.paymentStatus!))
-            .take(SCOPED_REGISTRATIONS_LIMIT)
-        : await ctx.db.query('registrations').order('desc').take(UNSCOPED_REGISTRATIONS_LIMIT);
-
     const search = args.search?.trim().toLowerCase();
 
+    // Every read below is an explicit take(), so no single path can exceed
+    // Convex's per-query read ceiling however large the tables grow.
+    const PARTICIPANTS_SCAN_LIMIT = 20000;
+    const REGISTRATIONS_PER_PARTICIPANT_LIMIT = 500;
+    const SCOPED_REGISTRATIONS_LIMIT = 20000;
+    const UNSCOPED_REGISTRATIONS_LIMIT = 5000;
+
+    // `search` matches Participant fields, so resolve Participants first and
+    // walk into their Registrations by index, rather than scanning
+    // Registrations and joining a Participant per row. `participants` holds
+    // one row per person, while `registrations` grows with every
+    // person-and-Trip pair for the life of the system — so this scans the
+    // far smaller, far slower-growing table, and the rows it then reads are
+    // only the ones that can actually match.
+    let registrations;
+    let participantById: Map<Id<'participants'>, Doc<'participants'> | null>;
+
+    if (search) {
+      const participants = await ctx.db.query('participants').take(PARTICIPANTS_SCAN_LIMIT);
+      const matches = participants.filter(
+        (participant) =>
+          participant.fullName.toLowerCase().includes(search) ||
+          participant.icPassportNumber.toLowerCase().includes(search)
+      );
+      participantById = new Map(matches.map((participant) => [participant._id, participant]));
+      registrations = (
+        await Promise.all(
+          matches.map((participant) =>
+            ctx.db
+              .query('registrations')
+              .withIndex('by_participant', (q) => q.eq('participantId', participant._id))
+              .take(REGISTRATIONS_PER_PARTICIPANT_LIMIT)
+          )
+        )
+      ).flat();
+    } else {
+      registrations = args.tripId
+        ? await ctx.db
+            .query('registrations')
+            .withIndex('by_trip', (q) => q.eq('tripId', args.tripId!))
+            .take(SCOPED_REGISTRATIONS_LIMIT)
+        : args.paymentStatus
+          ? await ctx.db
+              .query('registrations')
+              .withIndex('by_paymentStatus', (q) => q.eq('paymentStatus', args.paymentStatus!))
+              .take(SCOPED_REGISTRATIONS_LIMIT)
+          : await ctx.db.query('registrations').order('desc').take(UNSCOPED_REGISTRATIONS_LIMIT);
+      participantById = new Map();
+    }
+
+    // Narrow before any joining, so the lookups below only run for rows that
+    // survive into the result.
     const filtered = registrations.filter(
-      (registration) => !args.paymentStatus || registration.paymentStatus === args.paymentStatus
+      (registration) =>
+        (!args.tripId || registration.tripId === args.tripId) &&
+        (!args.paymentStatus || registration.paymentStatus === args.paymentStatus)
     );
 
+    // Fetch each distinct Trip and Participant once, not once per Registration.
     const uniqueTripIds = [...new Set(filtered.map((registration) => registration.tripId))];
     const trips = await Promise.all(uniqueTripIds.map((tripId) => ctx.db.get(tripId)));
     const tripById = new Map(uniqueTripIds.map((tripId, index) => [tripId, trips[index]]));
 
-    const joined = await Promise.all(
-      filtered.map(async (registration) => {
-        const participant = await ctx.db.get(registration.participantId);
-        const trip = tripById.get(registration.tripId);
-        return {
-          _id: registration._id,
-          tripId: registration.tripId,
-          tripName: trip?.name ?? '',
-          participantId: registration.participantId,
-          fullName: participant?.fullName ?? '',
-          icPassportNumber: participant?.icPassportNumber ?? '',
-          email: participant?.email ?? '',
-          phone: participant?.phone ?? '',
-          paymentStatus: registration.paymentStatus,
-          registrationStatus: registration.registrationStatus,
-          registeredAt: registration.registeredAt
-        };
-      })
+    const missingParticipantIds = [
+      ...new Set(filtered.map((registration) => registration.participantId))
+    ].filter((participantId) => !participantById.has(participantId));
+    const fetchedParticipants = await Promise.all(
+      missingParticipantIds.map((participantId) => ctx.db.get(participantId))
     );
+    missingParticipantIds.forEach((participantId, index) => {
+      participantById.set(participantId, fetchedParticipants[index]);
+    });
 
-    if (!search) return joined;
-
-    return joined.filter(
-      (entry) =>
-        entry.fullName.toLowerCase().includes(search) ||
-        entry.icPassportNumber.toLowerCase().includes(search)
-    );
+    return filtered.map((registration) => {
+      const trip = tripById.get(registration.tripId);
+      const participant = participantById.get(registration.participantId);
+      return {
+        _id: registration._id,
+        tripId: registration.tripId,
+        tripName: trip?.name ?? '',
+        participantId: registration.participantId,
+        fullName: participant?.fullName ?? '',
+        icPassportNumber: participant?.icPassportNumber ?? '',
+        email: participant?.email ?? '',
+        phone: participant?.phone ?? '',
+        paymentStatus: registration.paymentStatus,
+        registrationStatus: registration.registrationStatus,
+        registeredAt: registration.registeredAt
+      };
+    });
   }
 });
 

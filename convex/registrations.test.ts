@@ -379,3 +379,72 @@ test('listAll filters by payment status', async () => {
     .query(api.registrations.listAll, { paymentStatus: 'paid' });
   expect(paid.map((r) => r.fullName)).toEqual(['Jane Doe']);
 });
+
+test('listAll returns every Trip a searched Participant is registered on', async () => {
+  const t = convexTest(schema, modules);
+  const tripA = await createTrip(t, { name: 'Bali Retreat' });
+  const tripB = await createTrip(t, { name: 'Tokyo Tour' });
+
+  await t
+    .withIdentity(staff)
+    .mutation(api.registrations.register, { tripId: tripA, ...validParticipant });
+  await t
+    .withIdentity(staff)
+    .mutation(api.registrations.register, { tripId: tripB, ...validParticipant });
+
+  const found = await t.withIdentity(staff).query(api.registrations.listAll, { search: 'jane' });
+  expect(found).toHaveLength(2);
+  const tripNames = found.map((r) => r.tripName);
+  expect(tripNames).toContain('Bali Retreat');
+  expect(tripNames).toContain('Tokyo Tour');
+});
+
+test('listAll combines search with a Trip filter', async () => {
+  const t = convexTest(schema, modules);
+  const tripA = await createTrip(t, { name: 'Bali Retreat' });
+  const tripB = await createTrip(t, { name: 'Tokyo Tour' });
+
+  await t
+    .withIdentity(staff)
+    .mutation(api.registrations.register, { tripId: tripA, ...validParticipant });
+  await t
+    .withIdentity(staff)
+    .mutation(api.registrations.register, { tripId: tripB, ...validParticipant });
+
+  const found = await t
+    .withIdentity(staff)
+    .query(api.registrations.listAll, { search: 'jane', tripId: tripB });
+  expect(found).toHaveLength(1);
+  expect(found[0]).toMatchObject({ fullName: 'Jane Doe', tripName: 'Tokyo Tour' });
+});
+
+test('listAll combines search with a Payment Status filter', async () => {
+  const t = convexTest(schema, modules);
+  const tripA = await createTrip(t, { name: 'Bali Retreat' });
+  const tripB = await createTrip(t, { name: 'Tokyo Tour' });
+
+  const regA = await t
+    .withIdentity(staff)
+    .mutation(api.registrations.register, { tripId: tripA, ...validParticipant });
+  await t
+    .withIdentity(staff)
+    .mutation(api.registrations.register, { tripId: tripB, ...validParticipant });
+  await t
+    .withIdentity(staff)
+    .mutation(api.registrations.setPaymentStatus, { registrationId: regA, paymentStatus: 'paid' });
+
+  const found = await t
+    .withIdentity(staff)
+    .query(api.registrations.listAll, { search: 'jane', paymentStatus: 'paid' });
+  expect(found).toHaveLength(1);
+  expect(found[0]).toMatchObject({ tripName: 'Bali Retreat', paymentStatus: 'paid' });
+});
+
+test('listAll search matches on IC/passport substring, not just a prefix', async () => {
+  const t = convexTest(schema, modules);
+  const tripId = await createTrip(t);
+  await t.withIdentity(staff).mutation(api.registrations.register, { tripId, ...validParticipant });
+
+  const found = await t.withIdentity(staff).query(api.registrations.listAll, { search: '23456' });
+  expect(found.map((r) => r.fullName)).toEqual(['Jane Doe']);
+});
