@@ -9,6 +9,7 @@
  */
 
 import type * as lib_identity from '../lib/identity.js';
+import type * as participants from '../participants.js';
 import type * as registrations from '../registrations.js';
 import type * as trips from '../trips.js';
 import type * as users from '../users.js';
@@ -17,6 +18,7 @@ import type { ApiFromModules, FilterApi, FunctionReference } from 'convex/server
 
 declare const fullApi: ApiFromModules<{
   'lib/identity': typeof lib_identity;
+  participants: typeof participants;
   registrations: typeof registrations;
   trips: typeof trips;
   users: typeof users;
