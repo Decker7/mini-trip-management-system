@@ -3,7 +3,8 @@ import { v } from 'convex/values';
 
 const app = defineApp({
   env: {
-    CLERK_SECRET_KEY: v.string()
+    CLERK_SECRET_KEY: v.string(),
+    APP_URL: v.string()
   }
 });
 

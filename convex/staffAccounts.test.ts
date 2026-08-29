@@ -29,6 +29,7 @@ function mockFetchOnce(body: unknown, ok = true, status = 200) {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
 });
 
 test('listUsers rejects an unauthenticated caller', async () => {
@@ -133,48 +134,26 @@ test("revokeStaffAccess sends a null role to Clerk's metadata-merge endpoint", a
 test('inviteStaff rejects a Staff identity', async () => {
   const t = convexTest(schema, modules);
   await expect(
-    t.withIdentity(staff).action(api.staffAccounts.inviteStaff, {
-      emailAddress: 'a@example.com',
-      redirectOrigin: 'http://localhost:3000'
-    })
+    t.withIdentity(staff).action(api.staffAccounts.inviteStaff, { emailAddress: 'a@example.com' })
   ).rejects.toThrow();
 });
 
 test('inviteStaff rejects a blank email address', async () => {
   const t = convexTest(schema, modules);
   await expect(
-    t.withIdentity(admin).action(api.staffAccounts.inviteStaff, {
-      emailAddress: '   ',
-      redirectOrigin: 'http://localhost:3000'
-    })
+    t.withIdentity(admin).action(api.staffAccounts.inviteStaff, { emailAddress: '   ' })
   ).rejects.toThrow();
 });
 
-test('inviteStaff rejects a redirect origin with a path or an unsafe scheme', async () => {
-  const t = convexTest(schema, modules);
-  await expect(
-    t.withIdentity(admin).action(api.staffAccounts.inviteStaff, {
-      emailAddress: 'new@example.com',
-      redirectOrigin: 'http://localhost:3000/some/path'
-    })
-  ).rejects.toThrow();
-  await expect(
-    t.withIdentity(admin).action(api.staffAccounts.inviteStaff, {
-      emailAddress: 'new@example.com',
-      redirectOrigin: 'javascript:alert(1)'
-    })
-  ).rejects.toThrow();
-});
-
-test('inviteStaff sends an invitation with the Staff role and a redirect to sign-up', async () => {
+test('inviteStaff sends an invitation with the Staff role and a redirect built from trusted server config', async () => {
+  vi.stubEnv('APP_URL', 'https://app.example.com');
   const fetchMock = mockFetchOnce({});
   vi.stubGlobal('fetch', fetchMock);
 
   const t = convexTest(schema, modules);
-  await t.withIdentity(admin).action(api.staffAccounts.inviteStaff, {
-    emailAddress: 'new@example.com',
-    redirectOrigin: 'https://app.example.com'
-  });
+  await t
+    .withIdentity(admin)
+    .action(api.staffAccounts.inviteStaff, { emailAddress: 'new@example.com' });
 
   const [url, init] = fetchMock.mock.calls[0];
   expect(url).toContain('/invitations');

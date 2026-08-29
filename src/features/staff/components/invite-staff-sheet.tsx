@@ -30,7 +30,7 @@ export function InviteStaffSheet({ onInvited }: { onInvited: () => void }) {
     },
     onSubmit: async ({ value }) => {
       try {
-        await inviteStaff({ ...value, redirectOrigin: window.location.origin });
+        await inviteStaff(value);
         toast.success('Invitation sent');
         setOpen(false);
         form.reset();

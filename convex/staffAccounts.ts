@@ -99,19 +99,12 @@ export const revokeStaffAccess = action({
   }
 });
 
-// Matches a bare origin only (scheme + host + optional port, no path/query),
-// so the caller can't smuggle in an arbitrary redirect target.
-const ORIGIN_PATTERN = /^https?:\/\/[a-zA-Z0-9.-]+(:\d+)?$/;
-
 export const inviteStaff = action({
-  args: { emailAddress: v.string(), redirectOrigin: v.string() },
+  args: { emailAddress: v.string() },
   handler: async (ctx, args) => {
     await requireAdmin(ctx);
     if (!args.emailAddress.trim()) {
       throw new ConvexError('Email address is required.');
-    }
-    if (!ORIGIN_PATTERN.test(args.redirectOrigin)) {
-      throw new ConvexError('Invalid redirect origin.');
     }
     await clerkFetch('/invitations', {
       method: 'POST',
@@ -119,8 +112,11 @@ export const inviteStaff = action({
         email_address: args.emailAddress,
         public_metadata: { role: 'staff' },
         // Without this, Clerk sends the invitee to its own generic hosted
-        // Account Portal instead of this app's sign-up page.
-        redirect_url: `${args.redirectOrigin}/auth/sign-up`
+        // Account Portal instead of this app's sign-up page. The origin must
+        // come from trusted server config, not client input: this URL is
+        // emailed to a third party (the invitee), so a caller-supplied value
+        // would be a phishing vector even though only Admins can invite.
+        redirect_url: `${env.APP_URL}/auth/sign-up`
       })
     });
   }
