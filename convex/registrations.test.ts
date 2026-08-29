@@ -708,13 +708,11 @@ test('listAll does not drop a search-plus-Trip-plus-Payment-Status match under a
     return { targetTripId };
   });
 
-  const scoped = await t
-    .withIdentity(staff)
-    .query(api.registrations.listAll, {
-      search: 'jane',
-      tripId: targetTripId,
-      paymentStatus: 'paid'
-    });
+  const scoped = await t.withIdentity(staff).query(api.registrations.listAll, {
+    search: 'jane',
+    tripId: targetTripId,
+    paymentStatus: 'paid'
+  });
   expect(scoped.rows).toHaveLength(1);
   expect(scoped.truncated).toBe(false);
 });
