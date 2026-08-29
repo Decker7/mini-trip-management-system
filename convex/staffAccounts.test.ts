@@ -100,6 +100,42 @@ test('updateUserRole merges the new role into the existing publicMetadata', asyn
   });
 });
 
+test('revokeStaffAccess rejects a Staff identity', async () => {
+  const t = convexTest(schema, modules);
+  await expect(
+    t.withIdentity(staff).action(api.staffAccounts.revokeStaffAccess, { userId: 'user_clerk_1' })
+  ).rejects.toThrow();
+});
+
+test('revokeStaffAccess rejects revoking an Admin account', async () => {
+  vi.stubGlobal('fetch', mockFetchOnce({ ...clerkUser, public_metadata: { role: 'admin' } }));
+
+  const t = convexTest(schema, modules);
+  await expect(
+    t.withIdentity(admin).action(api.staffAccounts.revokeStaffAccess, { userId: 'user_clerk_1' })
+  ).rejects.toThrow();
+});
+
+test('revokeStaffAccess clears the role while preserving other publicMetadata', async () => {
+  const getMock = mockFetchOnce({
+    ...clerkUser,
+    public_metadata: { role: 'staff', favoriteColor: 'blue' }
+  });
+  const patchMock = mockFetchOnce({});
+  const fetchMock = vi.fn().mockImplementationOnce(getMock).mockImplementationOnce(patchMock);
+  vi.stubGlobal('fetch', fetchMock);
+
+  const t = convexTest(schema, modules);
+  await t
+    .withIdentity(admin)
+    .action(api.staffAccounts.revokeStaffAccess, { userId: 'user_clerk_1' });
+
+  const [patchUrl, patchInit] = fetchMock.mock.calls[1];
+  expect(patchUrl).toContain('/users/user_clerk_1');
+  expect(patchInit).toMatchObject({ method: 'PATCH' });
+  expect(JSON.parse(patchInit.body)).toEqual({ public_metadata: { favoriteColor: 'blue' } });
+});
+
 test('inviteStaff rejects a Staff identity', async () => {
   const t = convexTest(schema, modules);
   await expect(
