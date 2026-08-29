@@ -38,3 +38,10 @@ A User role that can view/search Trips, register Participants onto Trips, and vi
 
 **User**:
 A person with a login to the system, assigned either the Admin or Staff role.
+
+**Revoke Access**:
+Removing a Staff User's role so they can no longer log into the system. Does not delete the underlying account. A revoked User becomes Unassigned; assigning them a role again restores their access. The system has no action that permanently deletes a User's account.
+_Avoid_: Delete, remove, deactivate
+
+**Unassigned**:
+A User whose account exists but has no Admin or Staff role, either because a Staff User's access was revoked or because a role was never assigned. Cannot log into the system.
