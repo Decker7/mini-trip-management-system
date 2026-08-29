@@ -608,6 +608,115 @@ test('listAll does not call a search-plus-Payment-Status result partial over oth
   expect(unscoped.truncated).toBe(true);
 });
 
+test('listAll does not call a search-plus-Trip-plus-Payment-Status result partial over other statuses on the same Trip', async () => {
+  const t = convexTest(schema, modules);
+  const perParticipant = LIST_ALL_LIMITS.registrationsPerParticipant;
+
+  // A Participant whose history on a single Trip exceeds the per-Participant
+  // cap (reachable via repeated cancel/re-register cycles), but who holds a
+  // single `paid` Registration among a sea of `unpaid` ones on that same Trip.
+  const { tripId } = await t.run(async (ctx) => {
+    const participantId = await ctx.db.insert('participants', validParticipant);
+    const tripId = await ctx.db.insert('trips', {
+      name: 'Busy Trip',
+      destination: 'Nowhere',
+      startDate: '2026-09-10',
+      endDate: '2026-09-15',
+      capacity: 10,
+      createdBy: admin.subject
+    });
+
+    await ctx.db.insert('registrations', {
+      tripId,
+      participantId,
+      paymentStatus: 'paid',
+      registrationStatus: 'registered',
+      registeredAt: 0,
+      registeredBy: staff.subject
+    });
+    for (let i = 0; i < perParticipant + 1; i++) {
+      await ctx.db.insert('registrations', {
+        tripId,
+        participantId,
+        paymentStatus: 'unpaid',
+        registrationStatus: 'cancelled',
+        registeredAt: i + 1,
+        registeredBy: staff.subject
+      });
+    }
+    return { tripId };
+  });
+
+  // Scoped to this Trip and `paid`, the answer is that one row — and it is
+  // complete. The rows past the cap are all `unpaid` on the same Trip, which
+  // the Payment Status filter excludes anyway. Reading via `by_trip_and_participant`
+  // first (ungated on Payment Status) would cap this at the raw per-Participant
+  // limit and misreport `truncated: true`.
+  const scoped = await t
+    .withIdentity(staff)
+    .query(api.registrations.listAll, { search: 'jane', tripId, paymentStatus: 'paid' });
+  expect(scoped.rows).toHaveLength(1);
+  expect(scoped.truncated).toBe(false);
+});
+
+test('listAll does not drop a search-plus-Trip-plus-Payment-Status match under a same-status glut on another Trip', async () => {
+  const t = convexTest(schema, modules);
+  const perParticipant = LIST_ALL_LIMITS.registrationsPerParticipant;
+
+  // A Participant with one `paid` Registration on the Trip being queried, and
+  // enough other `paid` Registrations on a *different* Trip to overflow the
+  // per-Participant cap. An index read scoped only by (Participant, Payment
+  // Status) — ignoring Trip — would cap and slice across both Trips combined,
+  // and could drop the matching row for the queried Trip entirely if it isn't
+  // among the first rows read.
+  const { targetTripId } = await t.run(async (ctx) => {
+    const participantId = await ctx.db.insert('participants', validParticipant);
+    const makeTrip = (name: string) =>
+      ctx.db.insert('trips', {
+        name,
+        destination: 'Nowhere',
+        startDate: '2026-09-10',
+        endDate: '2026-09-15',
+        capacity: 10,
+        createdBy: admin.subject
+      });
+
+    const otherTripId = await makeTrip('Other Trip');
+    for (let i = 0; i < perParticipant + 1; i++) {
+      await ctx.db.insert('registrations', {
+        tripId: otherTripId,
+        participantId,
+        paymentStatus: 'paid',
+        registrationStatus: 'cancelled',
+        registeredAt: i,
+        registeredBy: staff.subject
+      });
+    }
+
+    // Inserted after the glut, so a read merely capped by creation order
+    // (ignoring Trip) would miss it.
+    const targetTripId = await makeTrip('Target Trip');
+    await ctx.db.insert('registrations', {
+      tripId: targetTripId,
+      participantId,
+      paymentStatus: 'paid',
+      registrationStatus: 'registered',
+      registeredAt: perParticipant + 2,
+      registeredBy: staff.subject
+    });
+
+    return { targetTripId };
+  });
+
+  const scoped = await t.withIdentity(staff).query(api.registrations.listAll, {
+    search: 'jane',
+    tripId: targetTripId,
+    paymentStatus: 'paid'
+  });
+  expect(scoped.rows).toHaveLength(1);
+  expect(scoped.truncated).toBe(false);
+});
+
 test('listAll caps keep total documents scanned under Convex per-query ceiling', () => {
   // Convex scans at most 32,000 documents per query. Capping each read alone
   // is not enough — the search path issues one read per matched Participant,

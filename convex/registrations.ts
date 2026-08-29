@@ -240,13 +240,25 @@ export const listAll = query({
       // this cap is not reachable off rows the filter was always going to
       // drop — which is what would otherwise mark a complete filtered result
       // as partial.
+      // Read via whichever index matches every active filter, so the read
+      // itself is bounded by all of them — not just one. Reading through an
+      // index that only covers a subset of the active filters (e.g.
+      // `by_trip_and_participant` when a Payment Status filter is also
+      // active) caps and slices a superset of the real answer before the
+      // remaining filter runs downstream: rows for a *different* Trip or
+      // Payment Status can consume the whole per-Participant cap, both
+      // overreporting `truncated` and — worse — dropping a genuinely
+      // matching row that never made it into the capped, sliced read.
       const perParticipant = await Promise.all(
         matches.map((participant) =>
-          args.tripId
+          args.tripId && args.paymentStatus
             ? ctx.db
                 .query('registrations')
-                .withIndex('by_trip_and_participant', (q) =>
-                  q.eq('tripId', args.tripId!).eq('participantId', participant._id)
+                .withIndex('by_participant_and_trip_and_paymentStatus', (q) =>
+                  q
+                    .eq('participantId', participant._id)
+                    .eq('tripId', args.tripId!)
+                    .eq('paymentStatus', args.paymentStatus!)
                 )
                 .take(REGISTRATIONS_PER_PARTICIPANT_LIMIT + 1)
             : args.paymentStatus
@@ -256,10 +268,17 @@ export const listAll = query({
                     q.eq('participantId', participant._id).eq('paymentStatus', args.paymentStatus!)
                   )
                   .take(REGISTRATIONS_PER_PARTICIPANT_LIMIT + 1)
-              : ctx.db
-                  .query('registrations')
-                  .withIndex('by_participant', (q) => q.eq('participantId', participant._id))
-                  .take(REGISTRATIONS_PER_PARTICIPANT_LIMIT + 1)
+              : args.tripId
+                ? ctx.db
+                    .query('registrations')
+                    .withIndex('by_trip_and_participant', (q) =>
+                      q.eq('tripId', args.tripId!).eq('participantId', participant._id)
+                    )
+                    .take(REGISTRATIONS_PER_PARTICIPANT_LIMIT + 1)
+                : ctx.db
+                    .query('registrations')
+                    .withIndex('by_participant', (q) => q.eq('participantId', participant._id))
+                    .take(REGISTRATIONS_PER_PARTICIPANT_LIMIT + 1)
         )
       );
       truncated ||= perParticipant.some(
@@ -273,20 +292,28 @@ export const listAll = query({
         args.tripId || args.paymentStatus
           ? SCOPED_REGISTRATIONS_LIMIT
           : UNSCOPED_REGISTRATIONS_LIMIT;
-      const scanned = args.tripId
-        ? await ctx.db
-            .query('registrations')
-            .withIndex('by_trip', (q) => q.eq('tripId', args.tripId!))
-            .take(limit + 1)
-        : args.paymentStatus
+      const scanned =
+        args.tripId && args.paymentStatus
           ? await ctx.db
               .query('registrations')
-              .withIndex('by_paymentStatus', (q) => q.eq('paymentStatus', args.paymentStatus!))
+              .withIndex('by_trip_and_paymentStatus', (q) =>
+                q.eq('tripId', args.tripId!).eq('paymentStatus', args.paymentStatus!)
+              )
               .take(limit + 1)
-          : await ctx.db
-              .query('registrations')
-              .order('desc')
-              .take(limit + 1);
+          : args.tripId
+            ? await ctx.db
+                .query('registrations')
+                .withIndex('by_trip', (q) => q.eq('tripId', args.tripId!))
+                .take(limit + 1)
+            : args.paymentStatus
+              ? await ctx.db
+                  .query('registrations')
+                  .withIndex('by_paymentStatus', (q) => q.eq('paymentStatus', args.paymentStatus!))
+                  .take(limit + 1)
+              : await ctx.db
+                  .query('registrations')
+                  .order('desc')
+                  .take(limit + 1);
       truncated ||= scanned.length > limit;
       registrations = scanned.slice(0, limit);
       participantById = new Map();
