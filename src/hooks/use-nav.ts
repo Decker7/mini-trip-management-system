@@ -33,10 +33,12 @@ export function useFilteredNavItems(items: NavItem[]) {
   // Memoize context and permissions
   const accessContext = useMemo(() => {
     const permissions = membership?.permissions || [];
-    // This app doesn't use Clerk Organizations — the Admin/Staff role lives on
-    // the User's publicMetadata instead, so fall back to that when there's no
-    // org membership role to check.
-    const role = membership?.role ?? (user?.publicMetadata?.role as string | undefined);
+    // This app doesn't use Clerk Organizations for authorization — the
+    // Admin/Staff role always lives on the User's publicMetadata. Prefer that
+    // over an Organization membership role: a leftover template Organization
+    // (e.g. "org:admin") must never override or hide access driven by this
+    // app's own role, which membership?.role ?? ... would otherwise do.
+    const role = (user?.publicMetadata?.role as string | undefined) ?? membership?.role;
 
     return {
       organization: organization ?? undefined,
