@@ -36,6 +36,9 @@ jobs:
       - name: Typecheck
         run: bun run typecheck
 
+      - name: Typecheck Convex
+        run: bun run typecheck:convex
+
       - name: Lint
         run: bun run lint
 
