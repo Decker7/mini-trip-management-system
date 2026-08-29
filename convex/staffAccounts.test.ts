@@ -29,6 +29,7 @@ function mockFetchOnce(body: unknown, ok = true, status = 200) {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
 });
 
 test('listUsers rejects an unauthenticated caller', async () => {
@@ -144,7 +145,8 @@ test('inviteStaff rejects a blank email address', async () => {
   ).rejects.toThrow();
 });
 
-test('inviteStaff sends an invitation with the Staff role', async () => {
+test('inviteStaff sends an invitation with the Staff role and a redirect built from trusted server config', async () => {
+  vi.stubEnv('APP_URL', 'https://app.example.com');
   const fetchMock = mockFetchOnce({});
   vi.stubGlobal('fetch', fetchMock);
 
@@ -158,6 +160,7 @@ test('inviteStaff sends an invitation with the Staff role', async () => {
   expect(init).toMatchObject({ method: 'POST' });
   expect(JSON.parse(init.body)).toEqual({
     email_address: 'new@example.com',
-    public_metadata: { role: 'staff' }
+    public_metadata: { role: 'staff' },
+    redirect_url: 'https://app.example.com/auth/sign-up'
   });
 });

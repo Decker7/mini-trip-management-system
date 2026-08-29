@@ -110,7 +110,13 @@ export const inviteStaff = action({
       method: 'POST',
       body: JSON.stringify({
         email_address: args.emailAddress,
-        public_metadata: { role: 'staff' }
+        public_metadata: { role: 'staff' },
+        // Without this, Clerk sends the invitee to its own generic hosted
+        // Account Portal instead of this app's sign-up page. The origin must
+        // come from trusted server config, not client input: this URL is
+        // emailed to a third party (the invitee), so a caller-supplied value
+        // would be a phishing vector even though only Admins can invite.
+        redirect_url: `${env.APP_URL}/auth/sign-up`
       })
     });
   }
