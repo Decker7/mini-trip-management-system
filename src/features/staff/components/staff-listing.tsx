@@ -58,11 +58,24 @@ export function StaffListing() {
     refresh();
   }, [refresh]);
 
+  // Applied right after a confirmed mutation, independent of `refresh`
+  // below: if the listUsers call that follows a successful mutation fails,
+  // `refresh` only toasts and leaves `users` untouched, which would
+  // otherwise keep showing pre-mutation state — e.g. a just-revoked account
+  // still listed as Staff with a Revoke action that's now guaranteed to fail.
+  function applyRole(userId: string, role: 'admin' | 'staff' | null) {
+    setUsers(
+      (current) =>
+        current?.map((user) => (user.userId === userId ? { ...user, role } : user)) ?? current
+    );
+  }
+
   async function handleRoleChange(userId: string, role: 'admin' | 'staff') {
     setPendingUserId(userId);
     try {
       await updateUserRole({ userId, role });
       toast.success('Role updated');
+      applyRole(userId, role);
       await refresh();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Couldn't update the role.");
@@ -77,6 +90,7 @@ export function StaffListing() {
     try {
       await revokeStaffAccess({ userId: revokeTarget.userId });
       toast.success('Access revoked');
+      applyRole(revokeTarget.userId, null);
       setRevokeTarget(null);
       await refresh();
     } catch (error) {
