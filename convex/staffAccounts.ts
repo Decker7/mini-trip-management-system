@@ -69,14 +69,32 @@ export const updateUserRole = action({
   args: { userId: v.string(), role: userRole },
   handler: async (ctx, args) => {
     await requireAdmin(ctx);
-    // publicMetadata is replaced wholesale on every update, so the existing
-    // Clerk User is read first and its other fields are preserved.
-    const user = (await clerkFetch(`/users/${args.userId}`)) as ClerkUser;
-    await clerkFetch(`/users/${args.userId}`, {
+    // The dedicated metadata endpoint deep-merges server-side, unlike
+    // PATCH /users/:id which replaces publicMetadata wholesale — so this
+    // can't race with or clobber a concurrent update to another metadata key.
+    await clerkFetch(`/users/${args.userId}/metadata`, {
       method: 'PATCH',
-      body: JSON.stringify({
-        public_metadata: { ...user.public_metadata, role: args.role }
-      })
+      body: JSON.stringify({ public_metadata: { role: args.role } })
+    });
+  }
+});
+
+export const revokeStaffAccess = action({
+  args: { userId: v.string() },
+  handler: async (ctx, args) => {
+    await requireAdmin(ctx);
+    const user = (await clerkFetch(`/users/${args.userId}`)) as ClerkUser;
+    if (user.public_metadata.role !== 'staff') {
+      throw new ConvexError('Only Staff accounts can have their access revoked here.');
+    }
+    // Setting a metadata key to null on this endpoint removes it server-side,
+    // so this can't clobber a concurrent update to another metadata key.
+    // A concurrent role change landing between the check above and this call
+    // is still possible (Clerk has no compare-and-swap for it); the fix in
+    // that rare case is just to reassign the role again from this page.
+    await clerkFetch(`/users/${args.userId}/metadata`, {
+      method: 'PATCH',
+      body: JSON.stringify({ public_metadata: { role: null } })
     });
   }
 });

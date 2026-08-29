@@ -77,7 +77,39 @@ test('updateUserRole rejects a Staff identity', async () => {
   ).rejects.toThrow();
 });
 
-test('updateUserRole merges the new role into the existing publicMetadata', async () => {
+test("updateUserRole sends the new role to Clerk's metadata-merge endpoint", async () => {
+  const fetchMock = mockFetchOnce({});
+  vi.stubGlobal('fetch', fetchMock);
+
+  const t = convexTest(schema, modules);
+  await t
+    .withIdentity(admin)
+    .action(api.staffAccounts.updateUserRole, { userId: 'user_clerk_1', role: 'admin' });
+
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+  const [url, init] = fetchMock.mock.calls[0];
+  expect(url).toContain('/users/user_clerk_1/metadata');
+  expect(init).toMatchObject({ method: 'PATCH' });
+  expect(JSON.parse(init.body)).toEqual({ public_metadata: { role: 'admin' } });
+});
+
+test('revokeStaffAccess rejects a Staff identity', async () => {
+  const t = convexTest(schema, modules);
+  await expect(
+    t.withIdentity(staff).action(api.staffAccounts.revokeStaffAccess, { userId: 'user_clerk_1' })
+  ).rejects.toThrow();
+});
+
+test('revokeStaffAccess rejects revoking an Admin account', async () => {
+  vi.stubGlobal('fetch', mockFetchOnce({ ...clerkUser, public_metadata: { role: 'admin' } }));
+
+  const t = convexTest(schema, modules);
+  await expect(
+    t.withIdentity(admin).action(api.staffAccounts.revokeStaffAccess, { userId: 'user_clerk_1' })
+  ).rejects.toThrow();
+});
+
+test("revokeStaffAccess sends a null role to Clerk's metadata-merge endpoint", async () => {
   const getMock = mockFetchOnce({
     ...clerkUser,
     public_metadata: { role: 'staff', favoriteColor: 'blue' }
@@ -89,15 +121,13 @@ test('updateUserRole merges the new role into the existing publicMetadata', asyn
   const t = convexTest(schema, modules);
   await t
     .withIdentity(admin)
-    .action(api.staffAccounts.updateUserRole, { userId: 'user_clerk_1', role: 'admin' });
+    .action(api.staffAccounts.revokeStaffAccess, { userId: 'user_clerk_1' });
 
   expect(fetchMock).toHaveBeenCalledTimes(2);
   const [patchUrl, patchInit] = fetchMock.mock.calls[1];
-  expect(patchUrl).toContain('/users/user_clerk_1');
+  expect(patchUrl).toContain('/users/user_clerk_1/metadata');
   expect(patchInit).toMatchObject({ method: 'PATCH' });
-  expect(JSON.parse(patchInit.body)).toEqual({
-    public_metadata: { role: 'admin', favoriteColor: 'blue' }
-  });
+  expect(JSON.parse(patchInit.body)).toEqual({ public_metadata: { role: null } });
 });
 
 test('inviteStaff rejects a Staff identity', async () => {

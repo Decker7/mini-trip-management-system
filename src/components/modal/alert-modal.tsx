@@ -33,10 +33,19 @@ export function AlertModal({
     return null;
   }
 
+  // Dismissing (backdrop click, Escape, or Cancel) while a confirm is
+  // in flight would hide the dialog without stopping the request, making an
+  // action that actually went through look cancelled. Block dismissal until
+  // it settles.
+  function handleClose() {
+    if (loading) return;
+    onClose();
+  }
+
   return (
-    <Modal title={title} description={description} isOpen={isOpen} onClose={onClose}>
+    <Modal title={title} description={description} isOpen={isOpen} onClose={handleClose}>
       <div className='flex w-full items-center justify-end space-x-2 pt-6'>
-        <Button variant='outline' onClick={onClose}>
+        <Button variant='outline' onClick={handleClose} disabled={loading}>
           Cancel
         </Button>
         <LoadingButton loading={loading} type='button' variant='destructive' onClick={onConfirm}>
