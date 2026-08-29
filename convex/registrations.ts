@@ -240,20 +240,30 @@ export const listAll = query({
       // this cap is not reachable off rows the filter was always going to
       // drop — which is what would otherwise mark a complete filtered result
       // as partial.
+      // Prefer whichever active filter has a combined index with
+      // `participantId`, so the read itself is bounded by every filter that
+      // can narrow it — not just the first one checked. `by_trip_and_participant`
+      // doesn't filter on Payment Status, so when both a Trip and a Payment
+      // Status are active, reading that index first would cap the *unfiltered*
+      // history and could report `truncated` off rows the Payment Status
+      // filter was always going to reject — overreporting a complete result
+      // as partial. `by_participant_and_paymentStatus` doesn't have that gap:
+      // Trip is applied downstream by the shared filter below, which can only
+      // narrow what this read already bounded correctly.
       const perParticipant = await Promise.all(
         matches.map((participant) =>
-          args.tripId
+          args.paymentStatus
             ? ctx.db
                 .query('registrations')
-                .withIndex('by_trip_and_participant', (q) =>
-                  q.eq('tripId', args.tripId!).eq('participantId', participant._id)
+                .withIndex('by_participant_and_paymentStatus', (q) =>
+                  q.eq('participantId', participant._id).eq('paymentStatus', args.paymentStatus!)
                 )
                 .take(REGISTRATIONS_PER_PARTICIPANT_LIMIT + 1)
-            : args.paymentStatus
+            : args.tripId
               ? ctx.db
                   .query('registrations')
-                  .withIndex('by_participant_and_paymentStatus', (q) =>
-                    q.eq('participantId', participant._id).eq('paymentStatus', args.paymentStatus!)
+                  .withIndex('by_trip_and_participant', (q) =>
+                    q.eq('tripId', args.tripId!).eq('participantId', participant._id)
                   )
                   .take(REGISTRATIONS_PER_PARTICIPANT_LIMIT + 1)
               : ctx.db

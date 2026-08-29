@@ -608,6 +608,57 @@ test('listAll does not call a search-plus-Payment-Status result partial over oth
   expect(unscoped.truncated).toBe(true);
 });
 
+test('listAll does not call a search-plus-Trip-plus-Payment-Status result partial over other statuses on the same Trip', async () => {
+  const t = convexTest(schema, modules);
+  const perParticipant = LIST_ALL_LIMITS.registrationsPerParticipant;
+
+  // A Participant whose history on a single Trip exceeds the per-Participant
+  // cap (reachable via repeated cancel/re-register cycles), but who holds a
+  // single `paid` Registration among a sea of `unpaid` ones on that same Trip.
+  const { tripId } = await t.run(async (ctx) => {
+    const participantId = await ctx.db.insert('participants', validParticipant);
+    const tripId = await ctx.db.insert('trips', {
+      name: 'Busy Trip',
+      destination: 'Nowhere',
+      startDate: '2026-09-10',
+      endDate: '2026-09-15',
+      capacity: 10,
+      createdBy: admin.subject
+    });
+
+    await ctx.db.insert('registrations', {
+      tripId,
+      participantId,
+      paymentStatus: 'paid',
+      registrationStatus: 'registered',
+      registeredAt: 0,
+      registeredBy: staff.subject
+    });
+    for (let i = 0; i < perParticipant + 1; i++) {
+      await ctx.db.insert('registrations', {
+        tripId,
+        participantId,
+        paymentStatus: 'unpaid',
+        registrationStatus: 'cancelled',
+        registeredAt: i + 1,
+        registeredBy: staff.subject
+      });
+    }
+    return { tripId };
+  });
+
+  // Scoped to this Trip and `paid`, the answer is that one row — and it is
+  // complete. The rows past the cap are all `unpaid` on the same Trip, which
+  // the Payment Status filter excludes anyway. Reading via `by_trip_and_participant`
+  // first (ungated on Payment Status) would cap this at the raw per-Participant
+  // limit and misreport `truncated: true`.
+  const scoped = await t
+    .withIdentity(staff)
+    .query(api.registrations.listAll, { search: 'jane', tripId, paymentStatus: 'paid' });
+  expect(scoped.rows).toHaveLength(1);
+  expect(scoped.truncated).toBe(false);
+});
+
 test('listAll caps keep total documents scanned under Convex per-query ceiling', () => {
   // Convex scans at most 32,000 documents per query. Capping each read alone
   // is not enough — the search path issues one read per matched Participant,
