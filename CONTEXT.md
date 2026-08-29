@@ -38,7 +38,3 @@ A User role that can view/search Trips, register Participants onto Trips, and vi
 
 **User**:
 A person with a login to the system, assigned either the Admin or Staff role.
-
-**Revoke Access**:
-Removing a Staff User's role so they can no longer log into the system. Does not delete the underlying account — the person could be re-invited later. The system has no action that permanently deletes a User's account.
-_Avoid_: Delete, remove, deactivate

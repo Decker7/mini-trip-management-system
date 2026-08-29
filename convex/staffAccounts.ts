@@ -81,23 +81,6 @@ export const updateUserRole = action({
   }
 });
 
-export const revokeStaffAccess = action({
-  args: { userId: v.string() },
-  handler: async (ctx, args) => {
-    await requireAdmin(ctx);
-    const user = (await clerkFetch(`/users/${args.userId}`)) as ClerkUser;
-    if (user.public_metadata.role !== 'staff') {
-      throw new ConvexError('Only Staff accounts can have their access revoked here.');
-    }
-    const remainingMetadata = { ...user.public_metadata };
-    delete remainingMetadata.role;
-    await clerkFetch(`/users/${args.userId}`, {
-      method: 'PATCH',
-      body: JSON.stringify({ public_metadata: remainingMetadata })
-    });
-  }
-});
-
 export const inviteStaff = action({
   args: { emailAddress: v.string() },
   handler: async (ctx, args) => {
