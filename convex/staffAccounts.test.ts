@@ -133,31 +133,55 @@ test("revokeStaffAccess sends a null role to Clerk's metadata-merge endpoint", a
 test('inviteStaff rejects a Staff identity', async () => {
   const t = convexTest(schema, modules);
   await expect(
-    t.withIdentity(staff).action(api.staffAccounts.inviteStaff, { emailAddress: 'a@example.com' })
+    t.withIdentity(staff).action(api.staffAccounts.inviteStaff, {
+      emailAddress: 'a@example.com',
+      redirectOrigin: 'http://localhost:3000'
+    })
   ).rejects.toThrow();
 });
 
 test('inviteStaff rejects a blank email address', async () => {
   const t = convexTest(schema, modules);
   await expect(
-    t.withIdentity(admin).action(api.staffAccounts.inviteStaff, { emailAddress: '   ' })
+    t.withIdentity(admin).action(api.staffAccounts.inviteStaff, {
+      emailAddress: '   ',
+      redirectOrigin: 'http://localhost:3000'
+    })
   ).rejects.toThrow();
 });
 
-test('inviteStaff sends an invitation with the Staff role', async () => {
+test('inviteStaff rejects a redirect origin with a path or an unsafe scheme', async () => {
+  const t = convexTest(schema, modules);
+  await expect(
+    t.withIdentity(admin).action(api.staffAccounts.inviteStaff, {
+      emailAddress: 'new@example.com',
+      redirectOrigin: 'http://localhost:3000/some/path'
+    })
+  ).rejects.toThrow();
+  await expect(
+    t.withIdentity(admin).action(api.staffAccounts.inviteStaff, {
+      emailAddress: 'new@example.com',
+      redirectOrigin: 'javascript:alert(1)'
+    })
+  ).rejects.toThrow();
+});
+
+test('inviteStaff sends an invitation with the Staff role and a redirect to sign-up', async () => {
   const fetchMock = mockFetchOnce({});
   vi.stubGlobal('fetch', fetchMock);
 
   const t = convexTest(schema, modules);
-  await t
-    .withIdentity(admin)
-    .action(api.staffAccounts.inviteStaff, { emailAddress: 'new@example.com' });
+  await t.withIdentity(admin).action(api.staffAccounts.inviteStaff, {
+    emailAddress: 'new@example.com',
+    redirectOrigin: 'https://app.example.com'
+  });
 
   const [url, init] = fetchMock.mock.calls[0];
   expect(url).toContain('/invitations');
   expect(init).toMatchObject({ method: 'POST' });
   expect(JSON.parse(init.body)).toEqual({
     email_address: 'new@example.com',
-    public_metadata: { role: 'staff' }
+    public_metadata: { role: 'staff' },
+    redirect_url: 'https://app.example.com/auth/sign-up'
   });
 });
