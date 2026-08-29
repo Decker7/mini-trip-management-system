@@ -5,7 +5,7 @@ import type { Doc } from './_generated/dataModel';
 
 const tripStatus = v.union(v.literal('upcoming'), v.literal('ongoing'), v.literal('completed'));
 
-function deriveStatus(trip: Pick<Doc<'trips'>, 'startDate' | 'endDate'>, today: string) {
+export function deriveStatus(trip: Pick<Doc<'trips'>, 'startDate' | 'endDate'>, today: string) {
   if (today < trip.startDate) return 'upcoming' as const;
   if (today > trip.endDate) return 'completed' as const;
   return 'ongoing' as const;
