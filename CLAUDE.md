@@ -16,11 +16,12 @@ Single-context — `CONTEXT.md` + `docs/adr/` at the repo root. See `docs/agents
 
 ## Branch workflow
 
-`development` is the working branch (branched off `main`). This is a solo interview-prep project — GitHub's real branch protection needs a paid plan, and there's no separate reviewer, so the PR-only ceremony that used to simulate it isn't required:
+`development` is the working branch (branched off `main`). Every change goes through a pull request — never commit or push directly to `development` or `main`:
 
-- Feature branches + PRs are still fine for organizing work, but direct commits/pushes to `development` are allowed too.
-- PRs opened against `development` can be merged directly — no need to wait for separate approval each round.
-- `main` stays the one branch to be more careful with — it's what a reviewer would actually look at.
+- For every change, create a feature branch off `development`, commit there, push it, and open a pull request targeting `development`.
+- Wait for the repo's CI checks (`.github/workflows/ci.yml`: typecheck, lint, format check, test, build) to finish on the PR. Fix and push again if any fail.
+- Once CI is green, merge the PR into `development` — no need to wait for a separate human approval each round.
+- `main` stays the one branch to be more careful with — merging into `main` still needs the user's explicit go-ahead in that specific conversation.
 
 <!-- convex-ai-start -->
 
