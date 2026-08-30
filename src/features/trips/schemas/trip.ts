@@ -10,6 +10,7 @@ export const tripSchema = z
       .number({ message: 'Capacity is required.' })
       .int('Capacity must be a whole number.')
       .positive('Capacity must be greater than zero.'),
+    price: z.number({ message: 'Price is required.' }).nonnegative('Price cannot be negative.'),
     description: z.string()
   })
   .refine((values) => values.endDate >= values.startDate, {
@@ -23,5 +24,6 @@ export type TripFormValues = {
   startDate: Date | undefined;
   endDate: Date | undefined;
   capacity: number | undefined;
+  price: number | undefined;
   description: string;
 };

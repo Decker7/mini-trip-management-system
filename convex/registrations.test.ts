@@ -18,6 +18,7 @@ const validTrip = {
   startDate: '2026-09-10',
   endDate: '2026-09-15',
   capacity: 2,
+  price: 300,
   description: 'A relaxing retreat'
 };
 
@@ -505,6 +506,7 @@ test('listAll does not report truncation for a dataset sitting exactly on the ca
       startDate: '2026-09-10',
       endDate: '2026-09-15',
       capacity: limit + 1,
+      price: 100,
       createdBy: admin.subject
     });
     const participantId = await ctx.db.insert('participants', validParticipant);
@@ -558,6 +560,7 @@ test('listAll does not call a search-plus-Trip result partial over other Trips r
         startDate: '2026-09-10',
         endDate: '2026-09-15',
         capacity: 10,
+        price: 100,
         createdBy: admin.subject
       });
 
@@ -612,6 +615,7 @@ test('listAll does not call a search-plus-Payment-Status result partial over oth
       startDate: '2026-09-10',
       endDate: '2026-09-15',
       capacity: 10,
+      price: 100,
       createdBy: admin.subject
     });
 
@@ -663,6 +667,7 @@ test('listAll does not call a search-plus-Trip-plus-Payment-Status result partia
       startDate: '2026-09-10',
       endDate: '2026-09-15',
       capacity: 10,
+      price: 100,
       createdBy: admin.subject
     });
 
@@ -718,6 +723,7 @@ test('listAll does not drop a search-plus-Trip-plus-Payment-Status match under a
         startDate: '2026-09-10',
         endDate: '2026-09-15',
         capacity: 10,
+        price: 100,
         createdBy: admin.subject
       });
 

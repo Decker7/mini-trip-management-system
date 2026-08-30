@@ -8,6 +8,7 @@ export default defineSchema({
     startDate: v.string(),
     endDate: v.string(),
     capacity: v.number(),
+    price: v.number(),
     description: v.optional(v.string()),
     createdBy: v.string()
   }),

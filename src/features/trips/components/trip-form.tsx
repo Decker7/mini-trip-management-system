@@ -19,6 +19,7 @@ export type TripInitialData = {
   startDate: string;
   endDate: string;
   capacity: number;
+  price: number;
   description?: string;
 };
 
@@ -42,6 +43,7 @@ export function TripForm({
       startDate: initialData ? fromDateOnlyString(initialData.startDate) : undefined,
       endDate: initialData ? fromDateOnlyString(initialData.endDate) : undefined,
       capacity: initialData?.capacity,
+      price: initialData?.price,
       description: initialData?.description ?? ''
     } as TripFormValues,
     validators: {
@@ -54,6 +56,7 @@ export function TripForm({
         startDate: toDateOnlyString(value.startDate!),
         endDate: toDateOnlyString(value.endDate!),
         capacity: value.capacity!,
+        price: value.price!,
         description: value.description || undefined
       };
 
@@ -117,6 +120,19 @@ export function TripForm({
                     type='number'
                     min={1}
                     placeholder='Enter capacity'
+                  />
+                )}
+              />
+              <form.AppField
+                name='price'
+                children={(field) => (
+                  <field.TextField
+                    label='Price'
+                    required
+                    type='number'
+                    min={0}
+                    step={0.01}
+                    placeholder='Enter price'
                   />
                 )}
               />

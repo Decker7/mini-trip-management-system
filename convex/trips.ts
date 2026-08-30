@@ -17,6 +17,7 @@ const tripFields = {
   startDate: v.string(),
   endDate: v.string(),
   capacity: v.number(),
+  price: v.number(),
   description: v.optional(v.string())
 };
 
@@ -26,6 +27,7 @@ function validateTripFields(args: {
   startDate: string;
   endDate: string;
   capacity: number;
+  price: number;
 }) {
   if (!args.name.trim()) {
     throw new ConvexError('Trip name is required.');
@@ -41,6 +43,9 @@ function validateTripFields(args: {
   }
   if (!Number.isFinite(args.capacity) || args.capacity <= 0) {
     throw new ConvexError('Capacity must be greater than zero.');
+  }
+  if (!Number.isFinite(args.price) || args.price < 0) {
+    throw new ConvexError('Price cannot be negative.');
   }
 }
 

@@ -31,6 +31,7 @@ test('getStats reports Trip, Participant, and Payment Status counts', async () =
       startDate: '2026-07-01',
       endDate: '2026-07-05',
       capacity: 10,
+      price: 100,
       createdBy: admin.subject
     });
     await ctx.db.insert('trips', {
@@ -39,6 +40,7 @@ test('getStats reports Trip, Participant, and Payment Status counts', async () =
       startDate: '2026-06-10',
       endDate: '2026-06-20',
       capacity: 10,
+      price: 100,
       createdBy: admin.subject
     });
     await ctx.db.insert('trips', {
@@ -47,6 +49,7 @@ test('getStats reports Trip, Participant, and Payment Status counts', async () =
       startDate: '2026-01-01',
       endDate: '2026-01-05',
       capacity: 10,
+      price: 100,
       createdBy: admin.subject
     });
 
@@ -163,6 +166,7 @@ test('getAnalytics computes payment breakdown, fill rates, upcoming trips, staff
         startDate: '2026-07-01',
         endDate: '2026-07-05',
         capacity: 2,
+        price: 100,
         createdBy: admin.subject
       });
       const upcomingTripId = await ctx.db.insert('trips', {
@@ -171,6 +175,7 @@ test('getAnalytics computes payment breakdown, fill rates, upcoming trips, staff
         startDate: '2026-06-20',
         endDate: '2026-06-25',
         capacity: 10,
+        price: 100,
         createdBy: admin.subject
       });
       const laterUpcomingTripId = await ctx.db.insert('trips', {
@@ -179,6 +184,7 @@ test('getAnalytics computes payment breakdown, fill rates, upcoming trips, staff
         startDate: '2026-08-01',
         endDate: '2026-08-05',
         capacity: 10,
+        price: 100,
         createdBy: admin.subject
       });
       const completedTripId = await ctx.db.insert('trips', {
@@ -187,6 +193,7 @@ test('getAnalytics computes payment breakdown, fill rates, upcoming trips, staff
         startDate: '2026-01-01',
         endDate: '2026-01-05',
         capacity: 2,
+        price: 100,
         createdBy: admin.subject
       });
 
@@ -310,6 +317,7 @@ test('getAnalytics does not report truncation for a Trip count sitting exactly o
         startDate: '2026-07-01',
         endDate: '2026-07-05',
         capacity: 10,
+        price: 100,
         createdBy: admin.subject
       });
     }
@@ -325,6 +333,7 @@ test('getAnalytics does not report truncation for a Trip count sitting exactly o
       startDate: '2026-07-01',
       endDate: '2026-07-05',
       capacity: 10,
+      price: 100,
       createdBy: admin.subject
     });
   });
@@ -344,6 +353,7 @@ test('getAnalytics only returns staffActivity to an Admin, never to Staff', asyn
       startDate: '2026-07-01',
       endDate: '2026-07-05',
       capacity: 10,
+      price: 100,
       createdBy: admin.subject
     });
     const participantId = await ctx.db.insert('participants', {

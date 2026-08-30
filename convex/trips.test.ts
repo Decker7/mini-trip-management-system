@@ -15,6 +15,7 @@ const validTrip = {
   startDate: '2026-09-10',
   endDate: '2026-09-15',
   capacity: 20,
+  price: 1200,
   description: 'A relaxing retreat'
 };
 
@@ -50,6 +51,13 @@ test('create rejects a capacity of zero or less', async () => {
   const t = convexTest(schema, modules);
   await expect(
     t.withIdentity(admin).mutation(api.trips.create, { ...validTrip, capacity: 0 })
+  ).rejects.toThrow();
+});
+
+test('create rejects a negative price', async () => {
+  const t = convexTest(schema, modules);
+  await expect(
+    t.withIdentity(admin).mutation(api.trips.create, { ...validTrip, price: -1 })
   ).rejects.toThrow();
 });
 
