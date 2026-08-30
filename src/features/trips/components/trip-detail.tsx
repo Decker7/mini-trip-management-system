@@ -58,7 +58,7 @@ export function TripDetail({ tripId }: { tripId: Id<'trips'> }) {
       : `${activeRegistrations} / ${trip.capacity} (${Math.max(trip.capacity - activeRegistrations, 0)} remaining)`;
 
   return (
-    <div className='mx-auto w-full max-w-3xl space-y-6'>
+    <div className='mx-auto w-full max-w-6xl space-y-6'>
       <Card>
         <AlertModal
           isOpen={isDeleteOpen}
