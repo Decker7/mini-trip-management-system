@@ -5,6 +5,7 @@ import { useMutation, useQuery } from 'convex/react';
 import { toast } from 'sonner';
 import { api } from '../../../../convex/_generated/api';
 import type { Id } from '../../../../convex/_generated/dataModel';
+import { getErrorMessage } from '@/lib/errors';
 import { AlertModal } from '@/components/modal/alert-modal';
 import { Button } from '@/components/ui/button';
 import {
@@ -49,7 +50,7 @@ export function RosterTable({ tripId }: { tripId: Id<'trips'> }) {
       });
       toast.success('Payment status updated');
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Couldn't update payment status.");
+      toast.error(getErrorMessage(error, "Couldn't update payment status."));
     }
   }
 
@@ -61,7 +62,7 @@ export function RosterTable({ tripId }: { tripId: Id<'trips'> }) {
       toast.success('Registration cancelled');
       setCancelTarget(null);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Couldn't cancel the Registration.");
+      toast.error(getErrorMessage(error, "Couldn't cancel the Registration."));
     } finally {
       setIsCancelling(false);
     }

@@ -16,6 +16,7 @@ import {
 } from '@/components/ui/sheet';
 import { Icons } from '@/components/icons';
 import { useAppForm } from '@/lib/form';
+import { getErrorMessage } from '@/lib/errors';
 import {
   registrationSchema,
   type RegistrationFormValues
@@ -44,7 +45,7 @@ export function RegisterParticipantSheet({ tripId }: { tripId: Id<'trips'> }) {
         setOpen(false);
         form.reset();
       } catch (error) {
-        toast.error(error instanceof Error ? error.message : "Couldn't register the Participant.");
+        toast.error(getErrorMessage(error, "Couldn't register the Participant."));
       }
     }
   });
