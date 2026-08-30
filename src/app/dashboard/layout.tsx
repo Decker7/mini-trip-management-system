@@ -2,6 +2,7 @@ import KBar from '@/components/kbar';
 import AppSidebar from '@/components/layout/app-sidebar';
 import Header from '@/components/layout/header';
 import { InfoSidebar } from '@/components/layout/info-sidebar';
+import { RoleGate } from '@/components/layout/role-gate';
 import { InfobarProvider } from '@/components/ui/infobar';
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar';
 import { auth } from '@clerk/nextjs/server';
@@ -36,7 +37,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
         <SidebarInset id='main-content' tabIndex={-1} className='scroll-mt-16'>
           <Header />
           <InfobarProvider defaultOpen={false}>
-            {children}
+            <RoleGate>{children}</RoleGate>
             <InfoSidebar side='right' />
           </InfobarProvider>
         </SidebarInset>
