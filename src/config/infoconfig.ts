@@ -97,7 +97,7 @@ export const teamInfoContent: InfobarContent = {
     {
       title: 'Navigation RBAC System',
       description:
-        'The application includes a fully client-side navigation filtering system using the `useNav` hook. It supports `requireOrg`, `permission`, and `role` checks for instant access control. Navigation items are configured in `src/config/nav-config.ts` with `access` properties.',
+        'The application includes a fully client-side navigation filtering system using the `useNav` hook. It supports `role` checks for instant access control. Navigation items are configured in `src/config/nav-config.ts` with `access` properties.',
       links: []
     }
   ]

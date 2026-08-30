@@ -3,8 +3,8 @@
 /**
  * Fully client-side hook for filtering navigation items based on RBAC
  *
- * This hook uses Clerk's client-side hooks to check permissions, roles, and organization
- * without any server calls. This is perfect for navigation visibility (UX only).
+ * This hook uses Clerk's client-side hooks to check the User's role without
+ * any server calls. This is perfect for navigation visibility (UX only).
  *
  * Performance:
  * - All checks are synchronous (no server calls)
@@ -17,7 +17,7 @@
  */
 
 import { useMemo } from 'react';
-import { useOrganization, useUser } from '@clerk/nextjs';
+import { useUser } from '@clerk/nextjs';
 import type { NavItem, NavGroup } from '@/types';
 
 /**
@@ -27,34 +27,18 @@ import type { NavItem, NavGroup } from '@/types';
  * @returns Filtered items
  */
 export function useFilteredNavItems(items: NavItem[]) {
-  const { organization, membership } = useOrganization();
   const { user } = useUser();
 
-  // Memoize context and permissions
+  // Memoize context. This app doesn't use Clerk Organizations — the
+  // Admin/Staff role always lives on the User's publicMetadata.
   const accessContext = useMemo(() => {
-    const permissions = membership?.permissions || [];
-    // This app doesn't use Clerk Organizations for authorization — the
-    // Admin/Staff role always lives on the User's publicMetadata. Prefer that
-    // over an Organization membership role: a leftover template Organization
-    // (e.g. "org:admin") must never override or hide access driven by this
-    // app's own role, which membership?.role ?? ... would otherwise do.
-    const role = (user?.publicMetadata?.role as string | undefined) ?? membership?.role;
+    const role = user?.publicMetadata?.role as string | undefined;
 
     return {
-      organization: organization ?? undefined,
       user: user ?? undefined,
-      permissions: permissions as string[],
-      role: role ?? undefined,
-      hasOrg: !!organization
+      role: role ?? undefined
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- using stable primitives to avoid infinite re-renders from unstable Clerk object refs
-  }, [
-    organization?.id,
-    user?.id,
-    user?.publicMetadata?.role,
-    membership?.permissions,
-    membership?.role
-  ]);
+  }, [user]);
 
   // Filter items synchronously (all client-side)
   const filteredItems = useMemo(() => {
@@ -65,22 +49,7 @@ export function useFilteredNavItems(items: NavItem[]) {
           return true;
         }
 
-        // Check requireOrg
-        if (item.access.requireOrg && !accessContext.hasOrg) {
-          return false;
-        }
-
-        // Check permission
-        if (item.access.permission) {
-          if (!accessContext.hasOrg) {
-            return false;
-          }
-          if (!accessContext.permissions.includes(item.access.permission)) {
-            return false;
-          }
-        }
-
-        // Check role (org membership role if present, else the User's publicMetadata.role)
+        // Check role
         if (item.access.role) {
           if (accessContext.role !== item.access.role) {
             return false;
@@ -115,22 +84,7 @@ export function useFilteredNavItems(items: NavItem[]) {
               return true;
             }
 
-            // Check requireOrg
-            if (childItem.access.requireOrg && !accessContext.hasOrg) {
-              return false;
-            }
-
-            // Check permission
-            if (childItem.access.permission) {
-              if (!accessContext.hasOrg) {
-                return false;
-              }
-              if (!accessContext.permissions.includes(childItem.access.permission)) {
-                return false;
-              }
-            }
-
-            // Check role (org membership role if present, else the User's publicMetadata.role)
+            // Check role
             if (childItem.access.role) {
               if (accessContext.role !== childItem.access.role) {
                 return false;
