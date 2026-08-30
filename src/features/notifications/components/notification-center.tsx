@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
+import { Skeleton } from '@/components/ui/skeleton';
 import { NotificationCard } from '@/components/ui/notification-card';
 import { useNotifications } from '../hooks/use-notifications';
 import { useRouter } from 'next/navigation';
@@ -13,7 +14,7 @@ import { useRouter } from 'next/navigation';
 const MAX_VISIBLE = 5;
 
 export function NotificationCenter() {
-  const { notifications, markAsRead, markAllAsRead, unreadCount } = useNotifications();
+  const { notifications, markAsRead, markAllAsRead, unreadCount, isLoading } = useNotifications();
   const router = useRouter();
   const count = unreadCount();
   const visibleNotifications = notifications.slice(0, MAX_VISIBLE);
@@ -55,7 +56,13 @@ export function NotificationCenter() {
         </div>
         <Separator />
         <ScrollArea className='h-[400px]'>
-          {notifications.length === 0 ? (
+          {isLoading ? (
+            <div className='flex flex-col gap-1 p-2'>
+              <Skeleton className='h-16 w-full rounded-2xl' />
+              <Skeleton className='h-16 w-full rounded-2xl' />
+              <Skeleton className='h-16 w-full rounded-2xl' />
+            </div>
+          ) : notifications.length === 0 ? (
             <div className='flex flex-col items-center justify-center py-12'>
               <Icons.notification className='text-muted-foreground/40 mb-2 h-8 w-8' />
               <p className='text-muted-foreground text-sm'>No notifications yet</p>
