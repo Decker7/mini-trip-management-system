@@ -186,8 +186,11 @@ export function RosterTable({
                     </SelectContent>
                   </Select>
                   {isLockedByStripe && (
-                    <p className='text-muted-foreground mt-1 text-xs'>
-                      Confirmed paid via Stripe — only Refunded can be set by hand
+                    <p
+                      className='text-muted-foreground mt-1 max-w-[120px] text-xs'
+                      title='Confirmed paid via Stripe — only Refunded can be set by hand'
+                    >
+                      Paid via Stripe
                     </p>
                   )}
                   {entry.paymentLinkSentAt !== undefined && (
