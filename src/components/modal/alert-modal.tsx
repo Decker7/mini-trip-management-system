@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { Button } from '@/components/ui/button';
+import type { VariantProps } from 'class-variance-authority';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Modal } from '@/components/ui/modal';
 import { LoadingButton } from '@/components/ui/loading-button';
 
@@ -12,6 +13,7 @@ interface AlertModalProps {
   title?: string;
   description?: string;
   confirmLabel?: string;
+  confirmVariant?: VariantProps<typeof buttonVariants>['variant'];
 }
 
 export function AlertModal({
@@ -21,7 +23,8 @@ export function AlertModal({
   loading,
   title = 'Are you sure?',
   description = 'This action cannot be undone.',
-  confirmLabel = 'Continue'
+  confirmLabel = 'Continue',
+  confirmVariant = 'destructive'
 }: AlertModalProps) {
   const [isMounted, setIsMounted] = useState(false);
 
@@ -48,7 +51,7 @@ export function AlertModal({
         <Button variant='outline' onClick={handleClose} disabled={loading}>
           Cancel
         </Button>
-        <LoadingButton loading={loading} type='button' variant='destructive' onClick={onConfirm}>
+        <LoadingButton loading={loading} type='button' variant={confirmVariant} onClick={onConfirm}>
           {confirmLabel}
         </LoadingButton>
       </div>

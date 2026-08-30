@@ -1,5 +1,5 @@
 import { ConvexError, v } from 'convex/values';
-import { mutation, query } from './_generated/server';
+import { internalMutation, internalQuery, mutation, query } from './_generated/server';
 import type { Doc, Id } from './_generated/dataModel';
 import { requireAssignedRole } from './lib/identity';
 import { recordActivityLog } from './lib/activityLog';
@@ -168,6 +168,73 @@ export const setPaymentStatus = mutation({
       oldValue: registration.paymentStatus,
       newValue: args.paymentStatus,
       changedBy: identity.subject
+    });
+  }
+});
+
+/**
+ * The guard for sending a Payment Link: the Registration must still be
+ * Registered and Unpaid, and its Trip must have a price. Returns exactly what
+ * `paymentLinks.sendPaymentLink` needs to build the Checkout Session and
+ * email, so it never has to re-derive them (or re-check a stale read) itself.
+ */
+export const getSendablePaymentLinkInfo = internalQuery({
+  args: { registrationId: v.id('registrations') },
+  handler: async (ctx, args) => {
+    const registration = await ctx.db.get(args.registrationId);
+    if (!registration) {
+      throw new ConvexError('Registration not found.');
+    }
+    if (registration.registrationStatus !== 'registered') {
+      throw new ConvexError('This Registration is cancelled.');
+    }
+    if (registration.paymentStatus !== 'unpaid') {
+      throw new ConvexError('This Registration is not Unpaid.');
+    }
+
+    const trip = await ctx.db.get(registration.tripId);
+    if (!trip) {
+      throw new ConvexError('Trip not found.');
+    }
+    if (trip.price === undefined) {
+      throw new ConvexError('This Trip has no price set.');
+    }
+
+    const participant = await ctx.db.get(registration.participantId);
+    if (!participant) {
+      throw new ConvexError('Participant not found.');
+    }
+
+    return {
+      tripName: trip.name,
+      price: trip.price,
+      participantEmail: participant.email
+    };
+  }
+});
+
+/**
+ * Persists a Payment Link's outstanding state on a Registration. Called only
+ * after the Checkout Session was created AND the email actually sent — if
+ * either fails, nothing is recorded here and the orphaned Checkout Session is
+ * simply left to expire on its own.
+ */
+export const recordPaymentLinkSent = internalMutation({
+  args: {
+    registrationId: v.id('registrations'),
+    sessionId: v.string(),
+    sentAt: v.number(),
+    sentBy: v.string()
+  },
+  handler: async (ctx, args) => {
+    const registration = await ctx.db.get(args.registrationId);
+    if (!registration) {
+      throw new ConvexError('Registration not found.');
+    }
+    await ctx.db.patch(args.registrationId, {
+      paymentLinkSessionId: args.sessionId,
+      paymentLinkSentAt: args.sentAt,
+      paymentLinkSentBy: args.sentBy
     });
   }
 });
@@ -385,7 +452,9 @@ export const listByTrip = query({
           phone: participant?.phone ?? '',
           paymentStatus: registration.paymentStatus,
           registrationStatus: registration.registrationStatus,
-          registeredAt: registration.registeredAt
+          registeredAt: registration.registeredAt,
+          paymentLinkSentAt: registration.paymentLinkSentAt,
+          paymentLinkSentBy: registration.paymentLinkSentBy
         };
       })
     );
