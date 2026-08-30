@@ -29,7 +29,12 @@ export default defineSchema({
     paymentStatus: v.union(v.literal('unpaid'), v.literal('paid'), v.literal('refunded')),
     registrationStatus: v.union(v.literal('registered'), v.literal('cancelled')),
     registeredAt: v.number(),
-    registeredBy: v.string()
+    registeredBy: v.string(),
+    // A Payment Link outstanding or most-recently sent for this Registration.
+    // All three are set together and cleared together (paid or expired).
+    paymentLinkSessionId: v.optional(v.string()),
+    paymentLinkSentAt: v.optional(v.number()),
+    paymentLinkSentBy: v.optional(v.string())
   })
     .index('by_trip', ['tripId'])
     .index('by_participant', ['participantId'])

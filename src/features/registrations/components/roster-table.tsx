@@ -1,7 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { useMutation, useQuery } from 'convex/react';
+import { useAction, useMutation, useQuery } from 'convex/react';
+import { formatDistanceToNow } from 'date-fns';
 import { toast } from 'sonner';
 import { api } from '../../../../convex/_generated/api';
 import type { Id } from '../../../../convex/_generated/dataModel';
@@ -31,16 +32,30 @@ import {
 import { RegistrationHistorySheet } from './registration-history-sheet';
 import { RegistrationStatusBadge } from './registration-status-badge';
 
-export function RosterTable({ tripId }: { tripId: Id<'trips'> }) {
+export function RosterTable({
+  tripId,
+  tripPrice
+}: {
+  tripId: Id<'trips'>;
+  tripPrice: number | undefined;
+}) {
   const roster = useQuery(api.registrations.listByTrip, { tripId });
+  const me = useQuery(api.users.whoami);
   const setPaymentStatus = useMutation(api.registrations.setPaymentStatus);
   const cancelRegistration = useMutation(api.registrations.cancel);
+  const sendPaymentLink = useAction(api.paymentLinks.sendPaymentLink);
 
   const [cancelTarget, setCancelTarget] = useState<{
     id: Id<'registrations'>;
     name: string;
   } | null>(null);
   const [isCancelling, setIsCancelling] = useState(false);
+
+  const [linkTarget, setLinkTarget] = useState<{
+    id: Id<'registrations'>;
+    email: string;
+  } | null>(null);
+  const [isSendingLink, setIsSendingLink] = useState(false);
 
   async function handlePaymentStatusChange(registrationId: Id<'registrations'>, value: string) {
     try {
@@ -68,6 +83,20 @@ export function RosterTable({ tripId }: { tripId: Id<'trips'> }) {
     }
   }
 
+  async function handleConfirmSendLink() {
+    if (!linkTarget) return;
+    setIsSendingLink(true);
+    try {
+      await sendPaymentLink({ registrationId: linkTarget.id });
+      toast.success('Payment link sent');
+      setLinkTarget(null);
+    } catch (error) {
+      toast.error(getErrorMessage(error, "Couldn't send the payment link."));
+    } finally {
+      setIsSendingLink(false);
+    }
+  }
+
   return (
     <div className='space-y-2'>
       <AlertModal
@@ -80,6 +109,21 @@ export function RosterTable({ tripId }: { tripId: Id<'trips'> }) {
           cancelTarget ? `${cancelTarget.name}'s slot on this Trip will be freed up.` : undefined
         }
         confirmLabel='Cancel Registration'
+      />
+
+      <AlertModal
+        isOpen={!!linkTarget}
+        onClose={() => setLinkTarget(null)}
+        onConfirm={handleConfirmSendLink}
+        loading={isSendingLink}
+        title='Send a payment link?'
+        description={
+          linkTarget
+            ? `Send a RM ${tripPrice?.toFixed(2)} payment link to ${linkTarget.email}?`
+            : undefined
+        }
+        confirmLabel='Send Payment Link'
+        confirmVariant='default'
       />
 
       <Table>
@@ -111,6 +155,8 @@ export function RosterTable({ tripId }: { tripId: Id<'trips'> }) {
           )}
           {roster?.map((entry) => {
             const isCancelled = entry.registrationStatus === 'cancelled';
+            const canSendPaymentLink =
+              !isCancelled && entry.paymentStatus === 'unpaid' && tripPrice !== undefined;
             return (
               <TableRow key={entry._id}>
                 <TableCell className='font-medium'>{entry.fullName}</TableCell>
@@ -133,12 +179,35 @@ export function RosterTable({ tripId }: { tripId: Id<'trips'> }) {
                       <SelectItem value='refunded'>{PAYMENT_STATUS_LABEL.refunded}</SelectItem>
                     </SelectContent>
                   </Select>
+                  {entry.paymentLinkSentAt !== undefined && (
+                    <p className='text-muted-foreground mt-1 text-xs'>
+                      Link sent {formatDistanceToNow(entry.paymentLinkSentAt, { addSuffix: true })}{' '}
+                      by{' '}
+                      {me && entry.paymentLinkSentBy === me.subject
+                        ? 'you'
+                        : entry.paymentLinkSentBy}
+                    </p>
+                  )}
                 </TableCell>
                 <TableCell>
                   <RegistrationStatusBadge status={entry.registrationStatus} />
                 </TableCell>
                 <TableCell className='text-right'>
                   <div className='flex justify-end'>
+                    {canSendPaymentLink && (
+                      <Button
+                        variant='ghost'
+                        size='icon'
+                        onClick={() => setLinkTarget({ id: entry._id, email: entry.email })}
+                      >
+                        <Icons.creditCard className='h-4 w-4' />
+                        <span className='sr-only'>
+                          {entry.paymentLinkSentAt !== undefined
+                            ? 'Resend Payment Link'
+                            : 'Send Payment Link'}
+                        </span>
+                      </Button>
+                    )}
                     <RegistrationHistorySheet
                       registrationId={entry._id}
                       participantName={entry.fullName}

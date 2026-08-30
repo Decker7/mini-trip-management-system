@@ -1,7 +1,7 @@
 /// <reference types="vite/client" />
 import { convexTest } from 'convex-test';
 import { expect, test } from 'vitest';
-import { api } from './_generated/api';
+import { api, internal } from './_generated/api';
 import schema from './schema';
 import { LIST_ALL_LIMITS } from './registrations';
 
@@ -803,4 +803,129 @@ test('listAll reports truncated=false when every matching row fits', async () =>
     expect(result.truncated).toBe(false);
     expect(result.rows.length).toBeGreaterThan(0);
   }
+});
+
+test('getSendablePaymentLinkInfo rejects a cancelled Registration', async () => {
+  const t = convexTest(schema, modules);
+  const tripId = await createTrip(t);
+  const registrationId = await t
+    .withIdentity(staff)
+    .mutation(api.registrations.register, { tripId, ...validParticipant });
+  await t.withIdentity(staff).mutation(api.registrations.cancel, { registrationId });
+
+  await expect(
+    t.query(internal.registrations.getSendablePaymentLinkInfo, { registrationId })
+  ).rejects.toThrow();
+});
+
+test('getSendablePaymentLinkInfo rejects a Registration that is not Unpaid', async () => {
+  const t = convexTest(schema, modules);
+  const tripId = await createTrip(t);
+  const registrationId = await t
+    .withIdentity(staff)
+    .mutation(api.registrations.register, { tripId, ...validParticipant });
+  await t
+    .withIdentity(staff)
+    .mutation(api.registrations.setPaymentStatus, { registrationId, paymentStatus: 'paid' });
+
+  await expect(
+    t.query(internal.registrations.getSendablePaymentLinkInfo, { registrationId })
+  ).rejects.toThrow();
+});
+
+test('getSendablePaymentLinkInfo rejects a Trip with no price set', async () => {
+  const t = convexTest(schema, modules);
+  const registrationId = await t.run(async (ctx) => {
+    const tripId = await ctx.db.insert('trips', {
+      name: 'No Price Trip',
+      destination: 'Nowhere',
+      startDate: '2026-09-10',
+      endDate: '2026-09-15',
+      capacity: 5,
+      createdBy: staff.subject
+    });
+    const participantId = await ctx.db.insert('participants', validParticipant);
+    return await ctx.db.insert('registrations', {
+      tripId,
+      participantId,
+      paymentStatus: 'unpaid',
+      registrationStatus: 'registered',
+      registeredAt: Date.now(),
+      registeredBy: staff.subject
+    });
+  });
+
+  await expect(
+    t.query(internal.registrations.getSendablePaymentLinkInfo, { registrationId })
+  ).rejects.toThrow();
+});
+
+test('getSendablePaymentLinkInfo rejects a non-existent Registration', async () => {
+  const t = convexTest(schema, modules);
+  const tripId = await createTrip(t);
+  const registrationId = await t
+    .withIdentity(staff)
+    .mutation(api.registrations.register, { tripId, ...validParticipant });
+  await t.run((ctx) => ctx.db.delete(registrationId));
+
+  await expect(
+    t.query(internal.registrations.getSendablePaymentLinkInfo, { registrationId })
+  ).rejects.toThrow();
+});
+
+test('getSendablePaymentLinkInfo returns the Trip price and Participant email for an eligible Registration', async () => {
+  const t = convexTest(schema, modules);
+  const tripId = await createTrip(t, { name: 'Bali Retreat', price: 250 });
+  const registrationId = await t
+    .withIdentity(staff)
+    .mutation(api.registrations.register, { tripId, ...validParticipant });
+
+  const info = await t.query(internal.registrations.getSendablePaymentLinkInfo, {
+    registrationId
+  });
+  expect(info).toEqual({
+    tripName: 'Bali Retreat',
+    price: 250,
+    participantEmail: validParticipant.email
+  });
+});
+
+test('recordPaymentLinkSent persists the session id, sent-at, and sent-by onto the Registration', async () => {
+  const t = convexTest(schema, modules);
+  const tripId = await createTrip(t);
+  const registrationId = await t
+    .withIdentity(staff)
+    .mutation(api.registrations.register, { tripId, ...validParticipant });
+
+  await t.mutation(internal.registrations.recordPaymentLinkSent, {
+    registrationId,
+    sessionId: 'cs_test_123',
+    sentAt: 1_000,
+    sentBy: staff.subject
+  });
+
+  const registration = await t.run((ctx) => ctx.db.get(registrationId));
+  expect(registration).toMatchObject({
+    paymentLinkSessionId: 'cs_test_123',
+    paymentLinkSentAt: 1_000,
+    paymentLinkSentBy: staff.subject
+  });
+});
+
+test('recordPaymentLinkSent rejects a non-existent Registration', async () => {
+  const t = convexTest(schema, modules);
+  const tripId = await createTrip(t);
+  const registrationId = await t
+    .withIdentity(staff)
+    .mutation(api.registrations.register, { tripId, ...validParticipant });
+  await t.run((ctx) => ctx.db.delete(registrationId));
+
+  await expect(
+    t.mutation(internal.registrations.recordPaymentLinkSent, {
+      registrationId,
+      sessionId: 'cs_test_123',
+      sentAt: 1_000,
+      sentBy: staff.subject
+    })
+  ).rejects.toThrow();
 });

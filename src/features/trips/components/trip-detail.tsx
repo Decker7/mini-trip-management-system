@@ -126,7 +126,7 @@ export function TripDetail({ tripId }: { tripId: Id<'trips'> }) {
           <RegisterParticipantSheet tripId={trip._id} />
         </CardHeader>
         <CardContent>
-          <RosterTable tripId={trip._id} />
+          <RosterTable tripId={trip._id} tripPrice={trip.price} />
         </CardContent>
       </Card>
     </div>
