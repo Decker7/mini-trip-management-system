@@ -192,7 +192,9 @@ export function TripListing() {
                     {trip.startDate} &ndash; {trip.endDate}
                   </TableCell>
                   <TableCell>{trip.capacity}</TableCell>
-                  <TableCell>${trip.price.toFixed(2)}</TableCell>
+                  <TableCell>
+                    {trip.price === undefined ? '—' : `$${trip.price.toFixed(2)}`}
+                  </TableCell>
                   <TableCell>
                     <TripStatusBadge status={trip.status} />
                   </TableCell>

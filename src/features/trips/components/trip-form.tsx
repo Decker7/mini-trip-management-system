@@ -19,7 +19,7 @@ export type TripInitialData = {
   startDate: string;
   endDate: string;
   capacity: number;
-  price: number;
+  price?: number;
   description?: string;
 };
 

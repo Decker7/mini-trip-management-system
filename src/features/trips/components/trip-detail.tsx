@@ -99,7 +99,9 @@ export function TripDetail({ tripId }: { tripId: Id<'trips'> }) {
           </div>
           <div>
             <p className='text-muted-foreground text-sm'>Price</p>
-            <p className='font-medium'>${trip.price.toFixed(2)}</p>
+            <p className='font-medium'>
+              {trip.price === undefined ? '—' : `$${trip.price.toFixed(2)}`}
+            </p>
           </div>
           <div>
             <p className='text-muted-foreground text-sm'>Start Date</p>
