@@ -6,6 +6,7 @@ const app = defineApp({
     CLERK_SECRET_KEY: v.string(),
     APP_URL: v.string(),
     STRIPE_SECRET_KEY: v.optional(v.string()),
+    STRIPE_WEBHOOK_SECRET: v.optional(v.string()),
     RESEND_API_KEY: v.optional(v.string()),
     RESEND_FROM_EMAIL: v.optional(v.string())
   }

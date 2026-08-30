@@ -239,6 +239,75 @@ export const recordPaymentLinkSent = internalMutation({
   }
 });
 
+/**
+ * The Activity Log actor for a Payment Status change made by Stripe's webhook
+ * rather than a Staff/Admin User, so the history can tell the two apart.
+ */
+export const STRIPE_SYSTEM_ACTOR = 'system:stripe';
+
+/**
+ * A Payment Link's Checkout Session was paid. The Registration is identified
+ * by the `registrationId` Stripe carries in that session's metadata — set
+ * once, immutably, at creation (`paymentLinks.sendPaymentLink`) — rather than
+ * by the Registration's *current* `paymentLinkSessionId`. That distinction
+ * matters because resending a link overwrites `paymentLinkSessionId` without
+ * expiring the Checkout Session it replaces, and Stripe does not invalidate
+ * that older session either: it stays payable until it expires on its own
+ * (up to 24h later). Looking up by metadata means a payment completed on that
+ * older, superseded-but-still-valid session is still recognized.
+ *
+ * Payment Status is set to Paid unconditionally, even if the Registration was
+ * separately cancelled after the link was sent: money moved, so the record
+ * says so — see ADR-0002.
+ */
+export const markPaidFromStripeSession = internalMutation({
+  args: { registrationId: v.id('registrations') },
+  handler: async (ctx, args) => {
+    const registration = await ctx.db.get(args.registrationId);
+    if (!registration) {
+      return;
+    }
+
+    const oldPaymentStatus = registration.paymentStatus;
+    await ctx.db.patch(registration._id, {
+      paymentStatus: 'paid',
+      paymentLinkSessionId: undefined,
+      paymentLinkSentAt: undefined,
+      paymentLinkSentBy: undefined
+    });
+    await recordActivityLog(ctx, {
+      registrationId: registration._id,
+      field: 'paymentStatus',
+      oldValue: oldPaymentStatus,
+      newValue: 'paid',
+      changedBy: STRIPE_SYSTEM_ACTOR
+    });
+  }
+});
+
+/**
+ * A Payment Link's Checkout Session expired unpaid. Unlike
+ * `markPaidFromStripeSession`, this only acts when the Registration's
+ * *current* `paymentLinkSessionId` still equals this expired session's id —
+ * so an expiry notification for a session a resend has since superseded
+ * can't clear the newer link's fields.
+ */
+export const clearExpiredPaymentLink = internalMutation({
+  args: { registrationId: v.id('registrations'), sessionId: v.string() },
+  handler: async (ctx, args) => {
+    const registration = await ctx.db.get(args.registrationId);
+    if (!registration || registration.paymentLinkSessionId !== args.sessionId) {
+      return;
+    }
+
+    await ctx.db.patch(registration._id, {
+      paymentLinkSessionId: undefined,
+      paymentLinkSentAt: undefined,
+      paymentLinkSentBy: undefined
+    });
+  }
+});
+
 export const listAll = query({
   args: {
     search: v.optional(v.string()),
