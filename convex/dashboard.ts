@@ -1,6 +1,6 @@
 import { v } from 'convex/values';
 import { query } from './_generated/server';
-import { requireIdentity } from './lib/identity';
+import { requireAssignedRole } from './lib/identity';
 import { deriveStatus } from './trips';
 
 /**
@@ -17,7 +17,7 @@ export const DASHBOARD_LIMITS = {
 export const getStats = query({
   args: { today: v.string() },
   handler: async (ctx, args) => {
-    await requireIdentity(ctx);
+    await requireAssignedRole(ctx);
 
     const {
       trips: TRIPS_LIMIT,

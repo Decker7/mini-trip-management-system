@@ -1,7 +1,7 @@
 import { ConvexError, v } from 'convex/values';
 import { mutation, query } from './_generated/server';
 import type { Doc, Id } from './_generated/dataModel';
-import { requireIdentity } from './lib/identity';
+import { requireAssignedRole } from './lib/identity';
 import { recordActivityLog } from './lib/activityLog';
 
 const paymentStatus = v.union(v.literal('unpaid'), v.literal('paid'), v.literal('refunded'));
@@ -67,7 +67,7 @@ export const register = mutation({
     phone: v.string()
   },
   handler: async (ctx, args) => {
-    const identity = await requireIdentity(ctx);
+    const identity = await requireAssignedRole(ctx);
     validateParticipantFields(args);
 
     const trip = await ctx.db.get(args.tripId);
@@ -134,7 +134,7 @@ export const register = mutation({
 export const cancel = mutation({
   args: { registrationId: v.id('registrations') },
   handler: async (ctx, args) => {
-    const identity = await requireIdentity(ctx);
+    const identity = await requireAssignedRole(ctx);
     const registration = await ctx.db.get(args.registrationId);
     if (!registration) {
       throw new ConvexError('Registration not found.');
@@ -156,7 +156,7 @@ export const cancel = mutation({
 export const setPaymentStatus = mutation({
   args: { registrationId: v.id('registrations'), paymentStatus },
   handler: async (ctx, args) => {
-    const identity = await requireIdentity(ctx);
+    const identity = await requireAssignedRole(ctx);
     const registration = await ctx.db.get(args.registrationId);
     if (!registration) {
       throw new ConvexError('Registration not found.');
@@ -179,7 +179,7 @@ export const listAll = query({
     paymentStatus: v.optional(paymentStatus)
   },
   handler: async (ctx, args) => {
-    await requireIdentity(ctx);
+    await requireAssignedRole(ctx);
 
     const search = args.search?.trim().toLowerCase();
 
@@ -367,7 +367,7 @@ export const listAll = query({
 export const listByTrip = query({
   args: { tripId: v.id('trips') },
   handler: async (ctx, args) => {
-    await requireIdentity(ctx);
+    await requireAssignedRole(ctx);
     const registrations = await ctx.db
       .query('registrations')
       .withIndex('by_trip', (q) => q.eq('tripId', args.tripId))
