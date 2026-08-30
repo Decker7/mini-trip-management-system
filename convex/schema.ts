@@ -34,7 +34,11 @@ export default defineSchema({
     // All three are set together and cleared together (paid or expired).
     paymentLinkSessionId: v.optional(v.string()),
     paymentLinkSentAt: v.optional(v.number()),
-    paymentLinkSentBy: v.optional(v.string())
+    paymentLinkSentBy: v.optional(v.string()),
+    // Who last set `paymentStatus` — a Clerk subject, or `STRIPE_SYSTEM_ACTOR`
+    // when Stripe's webhook confirmed the payment. Paid + this constant is
+    // what locks the Roster dropdown down to the Refunded escape hatch.
+    paymentStatusSetBy: v.optional(v.string())
   })
     .index('by_trip', ['tripId'])
     .index('by_participant', ['participantId'])

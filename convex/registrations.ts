@@ -161,7 +161,22 @@ export const setPaymentStatus = mutation({
     if (!registration) {
       throw new ConvexError('Registration not found.');
     }
-    await ctx.db.patch(args.registrationId, { paymentStatus: args.paymentStatus });
+    // A Payment Status Stripe itself confirmed can only be walked back via
+    // Refunded — a manual re-declaration of Unpaid or Paid over a real
+    // payment isn't a correction Staff should be able to make by hand.
+    if (
+      registration.paymentStatus === 'paid' &&
+      registration.paymentStatusSetBy === STRIPE_SYSTEM_ACTOR &&
+      args.paymentStatus !== 'refunded'
+    ) {
+      throw new ConvexError(
+        'This Registration was confirmed Paid via Stripe; it can only be changed to Refunded.'
+      );
+    }
+    await ctx.db.patch(args.registrationId, {
+      paymentStatus: args.paymentStatus,
+      paymentStatusSetBy: identity.subject
+    });
     await recordActivityLog(ctx, {
       registrationId: args.registrationId,
       field: 'paymentStatus',
@@ -271,6 +286,7 @@ export const markPaidFromStripeSession = internalMutation({
     const oldPaymentStatus = registration.paymentStatus;
     await ctx.db.patch(registration._id, {
       paymentStatus: 'paid',
+      paymentStatusSetBy: STRIPE_SYSTEM_ACTOR,
       paymentLinkSessionId: undefined,
       paymentLinkSentAt: undefined,
       paymentLinkSentBy: undefined
@@ -523,7 +539,8 @@ export const listByTrip = query({
           registrationStatus: registration.registrationStatus,
           registeredAt: registration.registeredAt,
           paymentLinkSentAt: registration.paymentLinkSentAt,
-          paymentLinkSentBy: registration.paymentLinkSentBy
+          paymentLinkSentBy: registration.paymentLinkSentBy,
+          paymentConfirmedByStripe: registration.paymentStatusSetBy === STRIPE_SYSTEM_ACTOR
         };
       })
     );
