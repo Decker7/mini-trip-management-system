@@ -14,6 +14,7 @@ export interface NotificationAction {
   type: ActionType;
   style?: ActionStyle;
   executed?: boolean;
+  href?: string;
 }
 
 export interface NotificationCardProps {

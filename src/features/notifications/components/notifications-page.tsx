@@ -6,18 +6,10 @@ import { Button } from '@/components/ui/button';
 import { NotificationCard } from '@/components/ui/notification-card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useRouter } from 'next/navigation';
-import { useNotificationStore } from '../utils/store';
-
-const actionRoutes: Record<string, string> = {
-  view: '/dashboard/workspaces',
-  'view-product': '/dashboard/product',
-  billing: '/dashboard/billing',
-  open: '/dashboard/kanban',
-  'open-chat': '/dashboard/chat'
-};
+import { useNotifications } from '../hooks/use-notifications';
 
 export default function NotificationsPage() {
-  const { notifications, markAsRead, markAllAsRead, unreadCount } = useNotificationStore();
+  const { notifications, markAsRead, markAllAsRead, unreadCount } = useNotifications();
   const router = useRouter();
   const count = unreadCount();
 
@@ -47,10 +39,10 @@ export default function NotificationsPage() {
             actions={notification.actions}
             onMarkAsRead={markAsRead}
             onAction={(notifId, actionId) => {
-              const route = actionRoutes[actionId];
-              if (route) {
-                markAsRead(notifId);
-                router.push(route);
+              const href = notification.actions?.find((a) => a.id === actionId)?.href;
+              markAsRead(notifId);
+              if (href) {
+                router.push(href);
               }
             }}
           />

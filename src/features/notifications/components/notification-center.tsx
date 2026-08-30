@@ -7,21 +7,13 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { NotificationCard } from '@/components/ui/notification-card';
-import { useNotificationStore } from '../utils/store';
+import { useNotifications } from '../hooks/use-notifications';
 import { useRouter } from 'next/navigation';
 
 const MAX_VISIBLE = 5;
 
-const actionRoutes: Record<string, string> = {
-  view: '/dashboard/workspaces',
-  'view-product': '/dashboard/product',
-  billing: '/dashboard/billing',
-  open: '/dashboard/kanban',
-  'open-chat': '/dashboard/chat'
-};
-
 export function NotificationCenter() {
-  const { notifications, markAsRead, markAllAsRead, unreadCount } = useNotificationStore();
+  const { notifications, markAsRead, markAllAsRead, unreadCount } = useNotifications();
   const router = useRouter();
   const count = unreadCount();
   const visibleNotifications = notifications.slice(0, MAX_VISIBLE);
@@ -81,10 +73,10 @@ export function NotificationCenter() {
                   actions={notification.actions}
                   onMarkAsRead={markAsRead}
                   onAction={(notifId, actionId) => {
-                    const route = actionRoutes[actionId];
-                    if (route) {
-                      markAsRead(notifId);
-                      router.push(route);
+                    const href = notification.actions?.find((a) => a.id === actionId)?.href;
+                    markAsRead(notifId);
+                    if (href) {
+                      router.push(href);
                     }
                   }}
                 />
