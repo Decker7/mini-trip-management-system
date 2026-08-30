@@ -9,6 +9,7 @@ import {
   ChartTooltip,
   ChartTooltipContent
 } from '@/components/ui/chart';
+import { Skeleton } from '@/components/ui/skeleton';
 
 const chartConfig = {
   count: {
@@ -36,7 +37,7 @@ export function RegistrationTrendChart({
       </CardHeader>
       <CardContent>
         {!data ? (
-          <div className='bg-muted h-[240px] w-full animate-pulse rounded-lg' />
+          <Skeleton className='h-[240px] w-full rounded-lg' />
         ) : total === 0 ? (
           <div className='text-muted-foreground flex h-[240px] items-center justify-center text-sm'>
             No Registrations in the last 14 days.

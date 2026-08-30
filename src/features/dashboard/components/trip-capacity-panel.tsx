@@ -3,6 +3,7 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/com
 import { Progress, ProgressTrack, ProgressIndicator } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
+import { Skeleton } from '@/components/ui/skeleton';
 
 type TripFillRate = {
   tripId: string;
@@ -21,7 +22,7 @@ export function TripCapacityPanel({ data }: { data: TripFillRate[] | undefined }
       </CardHeader>
       <CardContent className='flex flex-col gap-4'>
         {!data ? (
-          <div className='bg-muted h-[220px] w-full animate-pulse rounded-lg' />
+          <Skeleton className='h-[220px] w-full rounded-lg' />
         ) : data.length === 0 ? (
           <div className='text-muted-foreground flex h-[220px] items-center justify-center text-sm'>
             No active Trips to show yet.

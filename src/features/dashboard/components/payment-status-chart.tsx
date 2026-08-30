@@ -9,6 +9,7 @@ import {
   ChartTooltip,
   ChartTooltipContent
 } from '@/components/ui/chart';
+import { Skeleton } from '@/components/ui/skeleton';
 
 const chartConfig = {
   paid: { label: 'Paid', color: 'var(--chart-1)' },
@@ -36,7 +37,7 @@ export function PaymentStatusChart({ data }: { data: Breakdown | undefined }) {
       </CardHeader>
       <CardContent className='flex flex-col items-center gap-4'>
         {!data ? (
-          <div className='bg-muted h-[220px] w-full animate-pulse rounded-lg' />
+          <Skeleton className='h-[220px] w-full rounded-lg' />
         ) : total === 0 ? (
           <div className='text-muted-foreground flex h-[220px] items-center justify-center text-sm'>
             No active Registrations yet.

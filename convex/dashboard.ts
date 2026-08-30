@@ -94,7 +94,7 @@ function dateOnly(ms: number) {
 export const getAnalytics = query({
   args: { today: v.string() },
   handler: async (ctx, args) => {
-    await requireAssignedRole(ctx);
+    const identity = await requireAssignedRole(ctx);
 
     const {
       trips: TRIPS_LIMIT,
@@ -191,18 +191,26 @@ export const getAnalytics = query({
     // Active Registrations processed per Staff/Admin account, for a
     // leaderboard panel. `staffId` is a Clerk user id — resolving it to a
     // name is left to the client, which already has Admin-gated access to
-    // `staffAccounts.listUsers`.
-    const registeredByStaff = new Map<string, number>();
-    for (const registration of activeRegistrations) {
-      registeredByStaff.set(
-        registration.registeredBy,
-        (registeredByStaff.get(registration.registeredBy) ?? 0) + 1
+    // `staffAccounts.listUsers`. The leaderboard itself is Admin-only: a
+    // Staff account's own count is fine for them to see, but how much a
+    // *colleague* has processed is not this endpoint's call to expose, so a
+    // Staff caller gets an empty list regardless of what the UI does with it.
+    const staffActivity: { staffId: string; count: number }[] = [];
+    if (identity.role === 'admin') {
+      const registeredByStaff = new Map<string, number>();
+      for (const registration of activeRegistrations) {
+        registeredByStaff.set(
+          registration.registeredBy,
+          (registeredByStaff.get(registration.registeredBy) ?? 0) + 1
+        );
+      }
+      staffActivity.push(
+        ...[...registeredByStaff.entries()]
+          .map(([staffId, count]) => ({ staffId, count }))
+          .sort((a, b) => b.count - a.count)
+          .slice(0, 6)
       );
     }
-    const staffActivity = [...registeredByStaff.entries()]
-      .map(([staffId, count]) => ({ staffId, count }))
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 6);
 
     // Recent activity feed — newest Payment/Registration Status changes
     // across every Registration, denormalized for display. `activityLogs`

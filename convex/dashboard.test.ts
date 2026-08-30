@@ -332,3 +332,39 @@ test('getAnalytics does not report truncation for a Trip count sitting exactly o
   const overCap = await t.withIdentity(admin).query(api.dashboard.getAnalytics, { today });
   expect(overCap.tripsTruncated).toBe(true);
 });
+
+test('getAnalytics only returns staffActivity to an Admin, never to Staff', async () => {
+  const t = convexTest(schema, modules);
+  const staff = { subject: 'user_staff', role: 'staff' as const };
+
+  await t.run(async (ctx) => {
+    const tripId = await ctx.db.insert('trips', {
+      name: 'Trip',
+      destination: 'Somewhere',
+      startDate: '2026-07-01',
+      endDate: '2026-07-05',
+      capacity: 10,
+      createdBy: admin.subject
+    });
+    const participantId = await ctx.db.insert('participants', {
+      fullName: 'Jane Doe',
+      icPassportNumber: 'A1234567',
+      email: 'jane@example.com',
+      phone: '0123456789'
+    });
+    await ctx.db.insert('registrations', {
+      tripId,
+      participantId,
+      paymentStatus: 'unpaid',
+      registrationStatus: 'registered',
+      registeredAt: todayMs,
+      registeredBy: staff.subject
+    });
+  });
+
+  const asStaff = await t.withIdentity(staff).query(api.dashboard.getAnalytics, { today });
+  expect(asStaff.staffActivity).toEqual([]);
+
+  const asAdmin = await t.withIdentity(admin).query(api.dashboard.getAnalytics, { today });
+  expect(asAdmin.staffActivity).toEqual([{ staffId: staff.subject, count: 1 }]);
+});

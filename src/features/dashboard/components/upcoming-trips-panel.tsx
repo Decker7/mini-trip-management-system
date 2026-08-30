@@ -4,6 +4,7 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Icons } from '@/components/icons';
 import { fromDateOnlyString } from '@/features/trips/lib/date';
+import { Skeleton } from '@/components/ui/skeleton';
 
 type UpcomingTrip = {
   tripId: string;
@@ -36,7 +37,7 @@ export function UpcomingTripsPanel({
       </CardHeader>
       <CardContent className='flex flex-col gap-1'>
         {!data ? (
-          <div className='bg-muted h-[220px] w-full animate-pulse rounded-lg' />
+          <Skeleton className='h-[220px] w-full rounded-lg' />
         ) : data.length === 0 ? (
           <div className='text-muted-foreground flex h-[220px] items-center justify-center text-sm'>
             No upcoming Trips scheduled.

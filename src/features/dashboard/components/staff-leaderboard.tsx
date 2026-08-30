@@ -1,5 +1,6 @@
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Skeleton } from '@/components/ui/skeleton';
 
 type StaffActivityEntry = { staffId: string; count: number };
 
@@ -25,7 +26,7 @@ export function StaffLeaderboard({
       </CardHeader>
       <CardContent className='flex flex-col gap-3'>
         {!data ? (
-          <div className='bg-muted h-[220px] w-full animate-pulse rounded-lg' />
+          <Skeleton className='h-[220px] w-full rounded-lg' />
         ) : data.length === 0 ? (
           <div className='text-muted-foreground flex h-[220px] items-center justify-center text-sm'>
             No Registrations recorded yet.

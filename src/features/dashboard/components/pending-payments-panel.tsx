@@ -6,6 +6,7 @@ import { formatDistanceToNow } from 'date-fns';
 import { api } from '../../../../convex/_generated/api';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Skeleton } from '@/components/ui/skeleton';
 
 const PANEL_LIMIT = 6;
 
@@ -25,7 +26,7 @@ export function PendingPaymentsPanel() {
       </CardHeader>
       <CardContent className='flex flex-col gap-1'>
         {!rows ? (
-          <div className='bg-muted h-[220px] w-full animate-pulse rounded-lg' />
+          <Skeleton className='h-[220px] w-full rounded-lg' />
         ) : rows.length === 0 ? (
           <div className='text-muted-foreground flex h-[220px] items-center justify-center text-sm'>
             No unpaid Registrations right now.

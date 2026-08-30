@@ -3,6 +3,7 @@ import { formatDistanceToNow } from 'date-fns';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Icons } from '@/components/icons';
 import { cn } from '@/lib/utils';
+import { Skeleton } from '@/components/ui/skeleton';
 
 type ActivityEntry = {
   _id: string;
@@ -49,7 +50,7 @@ export function RecentActivityFeed({
       </CardHeader>
       <CardContent className='flex flex-col gap-1'>
         {!data ? (
-          <div className='bg-muted h-[260px] w-full animate-pulse rounded-lg' />
+          <Skeleton className='h-[260px] w-full rounded-lg' />
         ) : data.length === 0 ? (
           <div className='text-muted-foreground flex h-[260px] items-center justify-center text-sm'>
             No activity recorded yet.
