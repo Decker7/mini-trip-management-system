@@ -4,20 +4,13 @@ import { Icons } from '@/components/icons';
 import PageContainer from '@/components/layout/page-container';
 import { Button } from '@/components/ui/button';
 import { NotificationCard } from '@/components/ui/notification-card';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useRouter } from 'next/navigation';
-import { useNotificationStore } from '../utils/store';
-
-const actionRoutes: Record<string, string> = {
-  view: '/dashboard/workspaces',
-  'view-product': '/dashboard/product',
-  billing: '/dashboard/billing',
-  open: '/dashboard/kanban',
-  'open-chat': '/dashboard/chat'
-};
+import { useNotifications } from '../hooks/use-notifications';
 
 export default function NotificationsPage() {
-  const { notifications, markAsRead, markAllAsRead, unreadCount } = useNotificationStore();
+  const { notifications, markAsRead, markAllAsRead, unreadCount, isLoading } = useNotifications();
   const router = useRouter();
   const count = unreadCount();
 
@@ -25,6 +18,16 @@ export default function NotificationsPage() {
   const readNotifications = notifications.filter((n) => n.status === 'read');
 
   const renderList = (items: typeof notifications) => {
+    if (isLoading) {
+      return (
+        <div className='flex flex-col gap-2'>
+          <Skeleton className='h-20 w-full rounded-2xl' />
+          <Skeleton className='h-20 w-full rounded-2xl' />
+          <Skeleton className='h-20 w-full rounded-2xl' />
+        </div>
+      );
+    }
+
     if (items.length === 0) {
       return (
         <div className='flex flex-col items-center justify-center py-16'>
@@ -47,10 +50,10 @@ export default function NotificationsPage() {
             actions={notification.actions}
             onMarkAsRead={markAsRead}
             onAction={(notifId, actionId) => {
-              const route = actionRoutes[actionId];
-              if (route) {
-                markAsRead(notifId);
-                router.push(route);
+              const href = notification.actions?.find((a) => a.id === actionId)?.href;
+              markAsRead(notifId);
+              if (href) {
+                router.push(href);
               }
             }}
           />

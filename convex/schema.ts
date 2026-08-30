@@ -47,5 +47,11 @@ export default defineSchema({
     newValue: v.string(),
     changedBy: v.string(),
     changedAt: v.number()
-  }).index('by_registration_and_changedAt', ['registrationId', 'changedAt'])
+  }).index('by_registration_and_changedAt', ['registrationId', 'changedAt']),
+
+  notificationReads: defineTable({
+    userId: v.string(),
+    registrationId: v.id('registrations'),
+    readAt: v.number()
+  }).index('by_user_and_registration', ['userId', 'registrationId'])
 });

@@ -12,6 +12,7 @@ import type * as activityLogs from '../activityLogs.js';
 import type * as dashboard from '../dashboard.js';
 import type * as lib_activityLog from '../lib/activityLog.js';
 import type * as lib_identity from '../lib/identity.js';
+import type * as notifications from '../notifications.js';
 import type * as participants from '../participants.js';
 import type * as registrations from '../registrations.js';
 import type * as staffAccounts from '../staffAccounts.js';
@@ -25,6 +26,7 @@ declare const fullApi: ApiFromModules<{
   dashboard: typeof dashboard;
   'lib/activityLog': typeof lib_activityLog;
   'lib/identity': typeof lib_identity;
+  notifications: typeof notifications;
   participants: typeof participants;
   registrations: typeof registrations;
   staffAccounts: typeof staffAccounts;
