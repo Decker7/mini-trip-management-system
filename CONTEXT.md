@@ -21,10 +21,10 @@ The maximum number of counted Registrations a Trip can hold. Every Registration 
 _Avoid_: Limit, quota
 
 **Payment Status**:
-Whether a Registration has been paid for: Unpaid, Paid, or Refunded. Tracked independently of Registration Status. Can be set directly by a User, or set to Paid automatically when a Payment Link is completed.
+Whether a Registration has been paid for: Unpaid, Paid, or Refunded. Tracked independently of Registration Status. Can be set directly by a User; once automatic confirmation ships, it will also be set to Paid automatically when a Payment Link is completed.
 
 **Payment Link**:
-An optional, Staff- or Admin-initiated invitation emailed to a Participant, prompting them to pay a Registration's price online. Sending one is never required — a Registration's Payment Status can always be set directly instead. Completing a Payment Link always sets Payment Status to Paid, even overriding a Payment Status set manually in the meantime. A Registration records which User last sent a Payment Link and when, separately from the Activity Log.
+An optional, Staff- or Admin-initiated invitation emailed to a Participant, prompting them to pay a Registration's price online. Sending one is never required — a Registration's Payment Status can always be set directly instead. A Registration records which User last sent a Payment Link and when, separately from the Activity Log. Completing a Payment Link is intended to always set Payment Status to Paid, even overriding a Payment Status set manually in the meantime — but until the completion webhook ships, Payment Status still only changes by hand.
 _Avoid_: Invoice, checkout link
 
 **Registration Status**:
