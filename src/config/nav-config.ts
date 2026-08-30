@@ -8,27 +8,19 @@ import { NavGroup } from '@/types';
  *
  * RBAC Access Control:
  * Each navigation item can have an `access` property that controls visibility
- * based on permissions, plans, features, roles, and organization context.
+ * based on the User's role (plan/feature checks require server-side
+ * verification and are not yet wired into navigation filtering).
  *
  * Examples:
  *
- * 1. Require organization:
- *    access: { requireOrg: true }
- *
- * 2. Require specific permission:
- *    access: { requireOrg: true, permission: 'org:teams:manage' }
- *
- * 3. Require specific plan:
- *    access: { plan: 'pro' }
- *
- * 4. Require specific feature:
- *    access: { feature: 'premium_access' }
- *
- * 5. Require specific role:
+ * 1. Require specific role:
  *    access: { role: 'admin' }
  *
- * 6. Multiple conditions (all must be true):
- *    access: { requireOrg: true, permission: 'org:teams:manage', plan: 'pro' }
+ * 2. Require specific plan:
+ *    access: { plan: 'pro' }
+ *
+ * 3. Require specific feature:
+ *    access: { feature: 'premium_access' }
  *
  * Note: The `visible` function is deprecated but still supported for backward compatibility.
  * Use the `access` property for new items.
