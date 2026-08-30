@@ -190,9 +190,10 @@ export function RosterTable({
                     <Tooltip>
                       <TooltipTrigger
                         render={
-                          <span
-                            tabIndex={0}
-                            className='text-muted-foreground mt-1 inline-block max-w-[120px] cursor-help text-xs underline decoration-dotted'
+                          <button
+                            type='button'
+                            aria-label='Paid via Stripe'
+                            className='text-muted-foreground mt-1 inline-block max-w-[120px] cursor-help border-0 bg-transparent p-0 text-left text-xs underline decoration-dotted'
                           />
                         }
                       >
