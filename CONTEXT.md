@@ -5,8 +5,12 @@ Domain glossary for a system that manages trips, the participants who join them,
 ## Language
 
 **Trip**:
-A scheduled journey with a destination, a date range, and a maximum number of Participants it can hold (its Capacity).
+A scheduled journey with a Destination, a date range, and a maximum number of Participants it can hold (its Capacity).
 _Avoid_: Tour, package, event
+
+**Destination**:
+A Trip's travel location: a human-readable address, plus the exact map coordinates (latitude/longitude) an Admin or Staff pins for it via the map picker. The address is always present; coordinates are only present once someone has set or re-saved the Destination through the picker — a Trip created before the picker existed can have an address with no coordinates yet.
+_Avoid_: Location (ambiguous between the address and the pinned point)
 
 **Participant**:
 A person who can be registered onto one or more Trips. Identified primarily by their IC/passport number. Exists independently of any single Trip.
