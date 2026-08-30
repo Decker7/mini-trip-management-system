@@ -24,6 +24,7 @@ import {
   TableHeader,
   TableRow
 } from '@/components/ui/table';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Icons } from '@/components/icons';
 import {
   PAYMENT_STATUS_LABEL,
@@ -186,12 +187,21 @@ export function RosterTable({
                     </SelectContent>
                   </Select>
                   {isLockedByStripe && (
-                    <p
-                      className='text-muted-foreground mt-1 max-w-[120px] text-xs'
-                      title='Confirmed paid via Stripe — only Refunded can be set by hand'
-                    >
-                      Paid via Stripe
-                    </p>
+                    <Tooltip>
+                      <TooltipTrigger
+                        render={
+                          <span
+                            tabIndex={0}
+                            className='text-muted-foreground mt-1 inline-block max-w-[120px] cursor-help text-xs underline decoration-dotted'
+                          />
+                        }
+                      >
+                        Paid via Stripe
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        Confirmed paid via Stripe — only Refunded can be set by hand
+                      </TooltipContent>
+                    </Tooltip>
                   )}
                   {entry.paymentLinkSentAt !== undefined && (
                     <p className='text-muted-foreground mt-1 text-xs'>
