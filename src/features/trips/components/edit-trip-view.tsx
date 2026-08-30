@@ -36,6 +36,7 @@ export function EditTripView({ tripId }: { tripId: Id<'trips'> }) {
             startDate: trip.startDate,
             endDate: trip.endDate,
             capacity: trip.capacity,
+            price: trip.price,
             description: trip.description
           }}
           pageTitle='Edit Trip'

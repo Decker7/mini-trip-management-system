@@ -16,7 +16,8 @@ const validTrip = {
   destination: 'Bali',
   startDate: '2026-09-10',
   endDate: '2026-09-15',
-  capacity: 50
+  capacity: 50,
+  price: 500
 };
 
 function participant(suffix: string) {

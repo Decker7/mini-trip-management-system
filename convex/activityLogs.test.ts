@@ -18,6 +18,7 @@ const validTrip = {
   startDate: '2026-09-10',
   endDate: '2026-09-15',
   capacity: 5,
+  price: 300,
   description: 'A relaxing retreat'
 };
 

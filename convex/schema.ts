@@ -8,6 +8,9 @@ export default defineSchema({
     startDate: v.string(),
     endDate: v.string(),
     capacity: v.number(),
+    // Optional at the schema level so pre-existing Trips (created before this
+    // field existed) stay valid; `create`/`update` require it for all new writes.
+    price: v.optional(v.number()),
     description: v.optional(v.string()),
     createdBy: v.string()
   }),

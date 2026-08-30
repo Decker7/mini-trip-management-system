@@ -73,7 +73,7 @@ export function TripListing() {
     }
   }
 
-  const columnCount = isAdmin ? 6 : 5;
+  const columnCount = isAdmin ? 7 : 6;
 
   return (
     <div className='space-y-4'>
@@ -154,6 +154,7 @@ export function TripListing() {
                 <TableHead>Destination</TableHead>
                 <TableHead>Dates</TableHead>
                 <TableHead>Capacity</TableHead>
+                <TableHead>Price</TableHead>
                 <TableHead>Status</TableHead>
                 {isAdmin && <TableHead className='w-[100px] text-right'>Actions</TableHead>}
               </TableRow>
@@ -191,6 +192,9 @@ export function TripListing() {
                     {trip.startDate} &ndash; {trip.endDate}
                   </TableCell>
                   <TableCell>{trip.capacity}</TableCell>
+                  <TableCell>
+                    {trip.price === undefined ? '—' : `$${trip.price.toFixed(2)}`}
+                  </TableCell>
                   <TableCell>
                     <TripStatusBadge status={trip.status} />
                   </TableCell>
