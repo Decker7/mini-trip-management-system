@@ -300,6 +300,77 @@ test('setPaymentStatus rejects a non-existent Registration', async () => {
   ).rejects.toThrow();
 });
 
+test('setPaymentStatus rejects changing a Stripe-confirmed Paid Registration to Unpaid or Paid', async () => {
+  const t = convexTest(schema, modules);
+  const tripId = await createTrip(t);
+  const registrationId = await t
+    .withIdentity(staff)
+    .mutation(api.registrations.register, { tripId, ...validParticipant });
+  await t.mutation(internal.registrations.markPaidFromStripeSession, { registrationId });
+
+  await expect(
+    t
+      .withIdentity(staff)
+      .mutation(api.registrations.setPaymentStatus, { registrationId, paymentStatus: 'unpaid' })
+  ).rejects.toThrow();
+  await expect(
+    t
+      .withIdentity(staff)
+      .mutation(api.registrations.setPaymentStatus, { registrationId, paymentStatus: 'paid' })
+  ).rejects.toThrow();
+
+  const registration = await t.run((ctx) => ctx.db.get(registrationId));
+  expect(registration?.paymentStatus).toBe('paid');
+});
+
+test('setPaymentStatus allows changing a Stripe-confirmed Paid Registration to Refunded, which lifts the lock', async () => {
+  const t = convexTest(schema, modules);
+  const tripId = await createTrip(t);
+  const registrationId = await t
+    .withIdentity(staff)
+    .mutation(api.registrations.register, { tripId, ...validParticipant });
+  await t.mutation(internal.registrations.markPaidFromStripeSession, { registrationId });
+
+  await t
+    .withIdentity(staff)
+    .mutation(api.registrations.setPaymentStatus, { registrationId, paymentStatus: 'refunded' });
+
+  const refunded = await t.run((ctx) => ctx.db.get(registrationId));
+  expect(refunded?.paymentStatus).toBe('refunded');
+  expect(refunded?.paymentStatusSetBy).toBe(staff.subject);
+
+  // The lock only ever applies to a Stripe-confirmed *Paid* status — once
+  // Staff has manually moved it to Refunded, a further manual change to Paid
+  // is not itself Stripe-confirmed, so it must not be locked either.
+  await expect(
+    t
+      .withIdentity(staff)
+      .mutation(api.registrations.setPaymentStatus, { registrationId, paymentStatus: 'paid' })
+  ).resolves.toBeNull();
+  const repaid = await t.run((ctx) => ctx.db.get(registrationId));
+  expect(repaid?.paymentStatus).toBe('paid');
+});
+
+test('setPaymentStatus does not lock a manually-set Paid status', async () => {
+  const t = convexTest(schema, modules);
+  const tripId = await createTrip(t);
+  const registrationId = await t
+    .withIdentity(staff)
+    .mutation(api.registrations.register, { tripId, ...validParticipant });
+
+  await t
+    .withIdentity(staff)
+    .mutation(api.registrations.setPaymentStatus, { registrationId, paymentStatus: 'paid' });
+
+  await expect(
+    t
+      .withIdentity(staff)
+      .mutation(api.registrations.setPaymentStatus, { registrationId, paymentStatus: 'unpaid' })
+  ).resolves.toBeNull();
+  const registration = await t.run((ctx) => ctx.db.get(registrationId));
+  expect(registration?.paymentStatus).toBe('unpaid');
+});
+
 test('listByTrip rejects an unauthenticated caller and returns the joined roster', async () => {
   const t = convexTest(schema, modules);
   const tripId = await createTrip(t, { capacity: 5 });
@@ -947,6 +1018,7 @@ test('markPaidFromStripeSession sets Payment Status to Paid, clears the Payment 
 
   const registration = await t.run((ctx) => ctx.db.get(registrationId));
   expect(registration?.paymentStatus).toBe('paid');
+  expect(registration?.paymentStatusSetBy).toBe(STRIPE_SYSTEM_ACTOR);
   expect(registration?.paymentLinkSessionId).toBeUndefined();
   expect(registration?.paymentLinkSentAt).toBeUndefined();
   expect(registration?.paymentLinkSentBy).toBeUndefined();
@@ -962,6 +1034,9 @@ test('markPaidFromStripeSession sets Payment Status to Paid, clears the Payment 
       changedBy: STRIPE_SYSTEM_ACTOR
     })
   );
+
+  const roster = await t.withIdentity(staff).query(api.registrations.listByTrip, { tripId });
+  expect(roster.find((r) => r._id === registrationId)?.paymentConfirmedByStripe).toBe(true);
 });
 
 test('markPaidFromStripeSession marks Paid even when the Registration was cancelled after the link was sent', async () => {

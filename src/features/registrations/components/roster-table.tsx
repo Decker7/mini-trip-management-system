@@ -157,6 +157,8 @@ export function RosterTable({
             const isCancelled = entry.registrationStatus === 'cancelled';
             const canSendPaymentLink =
               !isCancelled && entry.paymentStatus === 'unpaid' && tripPrice !== undefined;
+            const isLockedByStripe =
+              entry.paymentStatus === 'paid' && entry.paymentConfirmedByStripe;
             return (
               <TableRow key={entry._id}>
                 <TableCell className='font-medium'>{entry.fullName}</TableCell>
@@ -174,11 +176,20 @@ export function RosterTable({
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value='unpaid'>{PAYMENT_STATUS_LABEL.unpaid}</SelectItem>
-                      <SelectItem value='paid'>{PAYMENT_STATUS_LABEL.paid}</SelectItem>
+                      <SelectItem value='unpaid' disabled={isLockedByStripe}>
+                        {PAYMENT_STATUS_LABEL.unpaid}
+                      </SelectItem>
+                      <SelectItem value='paid' disabled={isLockedByStripe}>
+                        {PAYMENT_STATUS_LABEL.paid}
+                      </SelectItem>
                       <SelectItem value='refunded'>{PAYMENT_STATUS_LABEL.refunded}</SelectItem>
                     </SelectContent>
                   </Select>
+                  {isLockedByStripe && (
+                    <p className='text-muted-foreground mt-1 text-xs'>
+                      Confirmed paid via Stripe — only Refunded can be set by hand
+                    </p>
+                  )}
                   {entry.paymentLinkSentAt !== undefined && (
                     <p className='text-muted-foreground mt-1 text-xs'>
                       Link sent {formatDistanceToNow(entry.paymentLinkSentAt, { addSuffix: true })}{' '}
