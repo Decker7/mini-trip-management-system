@@ -2,6 +2,18 @@ import { httpRouter } from 'convex/server';
 import Stripe from 'stripe';
 import { httpAction, env } from './_generated/server';
 import { internal } from './_generated/api';
+import type { Id } from './_generated/dataModel';
+
+/**
+ * `sendPaymentLink` stamps every Checkout Session with the Registration it
+ * belongs to, immutably, at creation — read that back rather than trying to
+ * resolve a Registration from the session id itself, which can change (a
+ * resend overwrites it) independently of the session.
+ */
+function registrationIdFromSession(session: Stripe.Checkout.Session): Id<'registrations'> | null {
+  const registrationId = session.metadata?.registrationId;
+  return registrationId ? (registrationId as Id<'registrations'>) : null;
+}
 
 const http = httpRouter();
 
@@ -44,16 +56,23 @@ http.route({
     switch (event.type) {
       case 'checkout.session.completed': {
         const session = event.data.object as Stripe.Checkout.Session;
-        await ctx.runMutation(internal.registrations.markPaidFromStripeSession, {
-          sessionId: session.id
-        });
+        const registrationId = registrationIdFromSession(session);
+        if (registrationId) {
+          await ctx.runMutation(internal.registrations.markPaidFromStripeSession, {
+            registrationId
+          });
+        }
         break;
       }
       case 'checkout.session.expired': {
         const session = event.data.object as Stripe.Checkout.Session;
-        await ctx.runMutation(internal.registrations.clearExpiredPaymentLink, {
-          sessionId: session.id
-        });
+        const registrationId = registrationIdFromSession(session);
+        if (registrationId) {
+          await ctx.runMutation(internal.registrations.clearExpiredPaymentLink, {
+            registrationId,
+            sessionId: session.id
+          });
+        }
         break;
       }
       default:

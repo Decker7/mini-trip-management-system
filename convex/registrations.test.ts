@@ -943,9 +943,7 @@ test('markPaidFromStripeSession sets Payment Status to Paid, clears the Payment 
     sentBy: staff.subject
   });
 
-  await t.mutation(internal.registrations.markPaidFromStripeSession, {
-    sessionId: 'cs_test_paid'
-  });
+  await t.mutation(internal.registrations.markPaidFromStripeSession, { registrationId });
 
   const registration = await t.run((ctx) => ctx.db.get(registrationId));
   expect(registration?.paymentStatus).toBe('paid');
@@ -980,15 +978,42 @@ test('markPaidFromStripeSession marks Paid even when the Registration was cancel
   });
   await t.withIdentity(staff).mutation(api.registrations.cancel, { registrationId });
 
-  await t.mutation(internal.registrations.markPaidFromStripeSession, {
-    sessionId: 'cs_test_paid_after_cancel'
-  });
+  await t.mutation(internal.registrations.markPaidFromStripeSession, { registrationId });
 
   const registration = await t.run((ctx) => ctx.db.get(registrationId));
   expect(registration).toMatchObject({
     paymentStatus: 'paid',
     registrationStatus: 'cancelled'
   });
+});
+
+test('markPaidFromStripeSession marks Paid for a superseded session that was still paid after a resend', async () => {
+  // Resending overwrites paymentLinkSessionId, but Stripe does not invalidate
+  // the Checkout Session it replaces — it stays payable until it expires on
+  // its own. A completed payment on that older session must still count.
+  const t = convexTest(schema, modules);
+  const tripId = await createTrip(t);
+  const registrationId = await t
+    .withIdentity(staff)
+    .mutation(api.registrations.register, { tripId, ...validParticipant });
+  await t.mutation(internal.registrations.recordPaymentLinkSent, {
+    registrationId,
+    sessionId: 'cs_test_old',
+    sentAt: 1_000,
+    sentBy: staff.subject
+  });
+  await t.mutation(internal.registrations.recordPaymentLinkSent, {
+    registrationId,
+    sessionId: 'cs_test_new',
+    sentAt: 2_000,
+    sentBy: staff.subject
+  });
+
+  // The Participant paid via the old, superseded-but-still-valid link.
+  await t.mutation(internal.registrations.markPaidFromStripeSession, { registrationId });
+
+  const registration = await t.run((ctx) => ctx.db.get(registrationId));
+  expect(registration?.paymentStatus).toBe('paid');
 });
 
 test('markPaidFromStripeSession does not create a duplicate Activity Log entry when already Paid', async () => {
@@ -1007,9 +1032,7 @@ test('markPaidFromStripeSession does not create a duplicate Activity Log entry w
     sentBy: staff.subject
   });
 
-  await t.mutation(internal.registrations.markPaidFromStripeSession, {
-    sessionId: 'cs_test_already_paid'
-  });
+  await t.mutation(internal.registrations.markPaidFromStripeSession, { registrationId });
 
   const history = await t
     .withIdentity(staff)
@@ -1019,21 +1042,17 @@ test('markPaidFromStripeSession does not create a duplicate Activity Log entry w
   );
 });
 
-test('markPaidFromStripeSession is a no-op for an unrecognized session id', async () => {
+test('markPaidFromStripeSession is a no-op for a deleted Registration', async () => {
   const t = convexTest(schema, modules);
   const tripId = await createTrip(t);
   const registrationId = await t
     .withIdentity(staff)
     .mutation(api.registrations.register, { tripId, ...validParticipant });
+  await t.run((ctx) => ctx.db.delete(registrationId));
 
   await expect(
-    t.mutation(internal.registrations.markPaidFromStripeSession, {
-      sessionId: 'cs_test_unknown'
-    })
+    t.mutation(internal.registrations.markPaidFromStripeSession, { registrationId })
   ).resolves.toBeNull();
-
-  const registration = await t.run((ctx) => ctx.db.get(registrationId));
-  expect(registration?.paymentStatus).toBe('unpaid');
 });
 
 test('clearExpiredPaymentLink clears the Payment Link fields when they still match the expired session', async () => {
@@ -1050,6 +1069,7 @@ test('clearExpiredPaymentLink clears the Payment Link fields when they still mat
   });
 
   await t.mutation(internal.registrations.clearExpiredPaymentLink, {
+    registrationId,
     sessionId: 'cs_test_expired'
   });
 
@@ -1081,6 +1101,7 @@ test('clearExpiredPaymentLink leaves a since-resent Payment Link untouched', asy
   });
 
   await t.mutation(internal.registrations.clearExpiredPaymentLink, {
+    registrationId,
     sessionId: 'cs_test_old'
   });
 
@@ -1091,11 +1112,18 @@ test('clearExpiredPaymentLink leaves a since-resent Payment Link untouched', asy
   });
 });
 
-test('clearExpiredPaymentLink is a no-op for an unrecognized session id', async () => {
+test('clearExpiredPaymentLink is a no-op for a deleted Registration', async () => {
   const t = convexTest(schema, modules);
+  const tripId = await createTrip(t);
+  const registrationId = await t
+    .withIdentity(staff)
+    .mutation(api.registrations.register, { tripId, ...validParticipant });
+  await t.run((ctx) => ctx.db.delete(registrationId));
+
   await expect(
     t.mutation(internal.registrations.clearExpiredPaymentLink, {
-      sessionId: 'cs_test_unknown'
+      registrationId,
+      sessionId: 'cs_test_expired'
     })
   ).resolves.toBeNull();
 });
