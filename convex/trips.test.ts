@@ -121,6 +121,23 @@ test('list rejects an unauthenticated caller', async () => {
   await expect(t.query(api.trips.list, { today: '2026-09-12' })).rejects.toThrow();
 });
 
+test('list rejects a signed-in caller with no role (e.g. revoked access)', async () => {
+  const t = convexTest(schema, modules);
+  const revoked = { subject: 'user_revoked' };
+  await expect(
+    t.withIdentity(revoked).query(api.trips.list, { today: '2026-09-12' })
+  ).rejects.toThrow();
+});
+
+test('get rejects a signed-in caller with no role (e.g. revoked access)', async () => {
+  const t = convexTest(schema, modules);
+  const tripId = await t.withIdentity(admin).mutation(api.trips.create, validTrip);
+  const revoked = { subject: 'user_revoked' };
+  await expect(
+    t.withIdentity(revoked).query(api.trips.get, { tripId, today: '2026-09-12' })
+  ).rejects.toThrow();
+});
+
 test('list derives Upcoming/Ongoing/Completed status from today', async () => {
   const t = convexTest(schema, modules);
   const asAdmin = t.withIdentity(admin);

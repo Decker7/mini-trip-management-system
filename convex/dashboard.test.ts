@@ -15,6 +15,12 @@ test('getStats rejects an unauthenticated caller', async () => {
   await expect(t.query(api.dashboard.getStats, { today })).rejects.toThrow();
 });
 
+test('getStats rejects a signed-in caller with no role (e.g. revoked access)', async () => {
+  const t = convexTest(schema, modules);
+  const revoked = { subject: 'user_revoked' };
+  await expect(t.withIdentity(revoked).query(api.dashboard.getStats, { today })).rejects.toThrow();
+});
+
 test('getStats reports Trip, Participant, and Payment Status counts', async () => {
   const t = convexTest(schema, modules);
 

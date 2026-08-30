@@ -9,6 +9,8 @@ const modules = import.meta.glob('./**/*.ts');
 
 const admin = { subject: 'user_admin', role: 'admin' as const };
 const staff = { subject: 'user_staff', role: 'staff' as const };
+// Signed in but no role assigned — matches an account whose Staff access was revoked.
+const revoked = { subject: 'user_revoked' };
 
 const validTrip = {
   name: 'Bali Retreat',
@@ -38,6 +40,14 @@ test('register rejects an unauthenticated caller', async () => {
   const tripId = await createTrip(t);
   await expect(
     t.mutation(api.registrations.register, { tripId, ...validParticipant })
+  ).rejects.toThrow();
+});
+
+test('register rejects a signed-in caller with no role (e.g. revoked access)', async () => {
+  const t = convexTest(schema, modules);
+  const tripId = await createTrip(t);
+  await expect(
+    t.withIdentity(revoked).mutation(api.registrations.register, { tripId, ...validParticipant })
   ).rejects.toThrow();
 });
 
@@ -198,6 +208,18 @@ test('cancel rejects an unauthenticated caller', async () => {
   await expect(t.mutation(api.registrations.cancel, { registrationId })).rejects.toThrow();
 });
 
+test('cancel rejects a signed-in caller with no role (e.g. revoked access)', async () => {
+  const t = convexTest(schema, modules);
+  const tripId = await createTrip(t);
+  const registrationId = await t
+    .withIdentity(staff)
+    .mutation(api.registrations.register, { tripId, ...validParticipant });
+
+  await expect(
+    t.withIdentity(revoked).mutation(api.registrations.cancel, { registrationId })
+  ).rejects.toThrow();
+});
+
 test('cancel rejects an already-cancelled Registration', async () => {
   const t = convexTest(schema, modules);
   const tripId = await createTrip(t);
@@ -248,6 +270,20 @@ test('setPaymentStatus updates the Registration and rejects an unauthenticated c
   expect(refunded!.paymentStatus).toBe('refunded');
 });
 
+test('setPaymentStatus rejects a signed-in caller with no role (e.g. revoked access)', async () => {
+  const t = convexTest(schema, modules);
+  const tripId = await createTrip(t);
+  const registrationId = await t
+    .withIdentity(staff)
+    .mutation(api.registrations.register, { tripId, ...validParticipant });
+
+  await expect(
+    t
+      .withIdentity(revoked)
+      .mutation(api.registrations.setPaymentStatus, { registrationId, paymentStatus: 'paid' })
+  ).rejects.toThrow();
+});
+
 test('setPaymentStatus rejects a non-existent Registration', async () => {
   const t = convexTest(schema, modules);
   const tripId = await createTrip(t);
@@ -276,6 +312,9 @@ test('listByTrip rejects an unauthenticated caller and returns the joined roster
   });
 
   await expect(t.query(api.registrations.listByTrip, { tripId })).rejects.toThrow();
+  await expect(
+    t.withIdentity(revoked).query(api.registrations.listByTrip, { tripId })
+  ).rejects.toThrow();
 
   const roster = await t.withIdentity(staff).query(api.registrations.listByTrip, { tripId });
   expect(roster).toHaveLength(2);
@@ -305,6 +344,7 @@ test('listAll rejects an unauthenticated caller and returns every Registration a
   });
 
   await expect(t.query(api.registrations.listAll, {})).rejects.toThrow();
+  await expect(t.withIdentity(revoked).query(api.registrations.listAll, {})).rejects.toThrow();
 
   const all = await t.withIdentity(staff).query(api.registrations.listAll, {});
   expect(all.truncated).toBe(false);

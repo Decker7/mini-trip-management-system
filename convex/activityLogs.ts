@@ -1,6 +1,6 @@
 import { v } from 'convex/values';
 import { query } from './_generated/server';
-import { requireIdentity } from './lib/identity';
+import { requireAssignedRole } from './lib/identity';
 
 /**
  * Read cap for `listByRegistration`. A Registration accumulates one entry per
@@ -16,7 +16,7 @@ export const ACTIVITY_LOG_LIMIT = 100;
 export const listByRegistration = query({
   args: { registrationId: v.id('registrations') },
   handler: async (ctx, args) => {
-    await requireIdentity(ctx);
+    await requireAssignedRole(ctx);
 
     // Newest first: a history panel is read from the most recent change
     // backwards, and it also means the cap drops the *oldest* entries rather

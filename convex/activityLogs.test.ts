@@ -137,6 +137,16 @@ test('listByRegistration rejects an unauthenticated caller', async () => {
   await expect(t.query(api.activityLogs.listByRegistration, { registrationId })).rejects.toThrow();
 });
 
+test('listByRegistration rejects a signed-in caller with no role (e.g. revoked access)', async () => {
+  const t = convexTest(schema, modules);
+  const { registrationId } = await seedRegistration(t);
+  const revoked = { subject: 'user_revoked' };
+
+  await expect(
+    t.withIdentity(revoked).query(api.activityLogs.listByRegistration, { registrationId })
+  ).rejects.toThrow();
+});
+
 test('listByRegistration returns an empty history for an unchanged Registration', async () => {
   const t = convexTest(schema, modules);
   const { registrationId } = await seedRegistration(t);

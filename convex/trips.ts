@@ -1,6 +1,6 @@
 import { ConvexError, v } from 'convex/values';
 import { mutation, query } from './_generated/server';
-import { requireAdmin, requireIdentity } from './lib/identity';
+import { requireAdmin, requireAssignedRole } from './lib/identity';
 import type { Doc } from './_generated/dataModel';
 
 const tripStatus = v.union(v.literal('upcoming'), v.literal('ongoing'), v.literal('completed'));
@@ -53,7 +53,7 @@ export const list = query({
     startDateTo: v.optional(v.string())
   },
   handler: async (ctx, args) => {
-    await requireIdentity(ctx);
+    await requireAssignedRole(ctx);
 
     const trips = await ctx.db.query('trips').order('desc').take(500);
     const search = args.search?.trim().toLowerCase();
@@ -76,7 +76,7 @@ export const list = query({
 export const get = query({
   args: { tripId: v.id('trips'), today: v.string() },
   handler: async (ctx, args) => {
-    await requireIdentity(ctx);
+    await requireAssignedRole(ctx);
     const trip = await ctx.db.get(args.tripId);
     if (!trip) return null;
     return { ...trip, status: deriveStatus(trip, args.today) };
