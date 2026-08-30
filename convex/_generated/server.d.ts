@@ -35,6 +35,7 @@ type Env = {
   readonly RESEND_API_KEY: string | undefined;
   readonly RESEND_FROM_EMAIL: string | undefined;
   readonly STRIPE_SECRET_KEY: string | undefined;
+  readonly STRIPE_WEBHOOK_SECRET: string | undefined;
 };
 
 /**

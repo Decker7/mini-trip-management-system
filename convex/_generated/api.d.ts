@@ -10,6 +10,7 @@
 
 import type * as activityLogs from '../activityLogs.js';
 import type * as dashboard from '../dashboard.js';
+import type * as http from '../http.js';
 import type * as lib_activityLog from '../lib/activityLog.js';
 import type * as lib_identity from '../lib/identity.js';
 import type * as notifications from '../notifications.js';
@@ -25,6 +26,7 @@ import type { ApiFromModules, FilterApi, FunctionReference } from 'convex/server
 declare const fullApi: ApiFromModules<{
   activityLogs: typeof activityLogs;
   dashboard: typeof dashboard;
+  http: typeof http;
   'lib/activityLog': typeof lib_activityLog;
   'lib/identity': typeof lib_identity;
   notifications: typeof notifications;

@@ -3,7 +3,7 @@ import { convexTest } from 'convex-test';
 import { expect, test } from 'vitest';
 import { api, internal } from './_generated/api';
 import schema from './schema';
-import { LIST_ALL_LIMITS } from './registrations';
+import { LIST_ALL_LIMITS, STRIPE_SYSTEM_ACTOR } from './registrations';
 
 const modules = import.meta.glob('./**/*.ts');
 
@@ -928,4 +928,174 @@ test('recordPaymentLinkSent rejects a non-existent Registration', async () => {
       sentBy: staff.subject
     })
   ).rejects.toThrow();
+});
+
+test('markPaidFromStripeSession sets Payment Status to Paid, clears the Payment Link, and logs a system-actor Activity Log entry', async () => {
+  const t = convexTest(schema, modules);
+  const tripId = await createTrip(t);
+  const registrationId = await t
+    .withIdentity(staff)
+    .mutation(api.registrations.register, { tripId, ...validParticipant });
+  await t.mutation(internal.registrations.recordPaymentLinkSent, {
+    registrationId,
+    sessionId: 'cs_test_paid',
+    sentAt: 1_000,
+    sentBy: staff.subject
+  });
+
+  await t.mutation(internal.registrations.markPaidFromStripeSession, {
+    sessionId: 'cs_test_paid'
+  });
+
+  const registration = await t.run((ctx) => ctx.db.get(registrationId));
+  expect(registration?.paymentStatus).toBe('paid');
+  expect(registration?.paymentLinkSessionId).toBeUndefined();
+  expect(registration?.paymentLinkSentAt).toBeUndefined();
+  expect(registration?.paymentLinkSentBy).toBeUndefined();
+
+  const history = await t
+    .withIdentity(staff)
+    .query(api.activityLogs.listByRegistration, { registrationId });
+  expect(history.entries).toContainEqual(
+    expect.objectContaining({
+      field: 'paymentStatus',
+      oldValue: 'unpaid',
+      newValue: 'paid',
+      changedBy: STRIPE_SYSTEM_ACTOR
+    })
+  );
+});
+
+test('markPaidFromStripeSession marks Paid even when the Registration was cancelled after the link was sent', async () => {
+  const t = convexTest(schema, modules);
+  const tripId = await createTrip(t);
+  const registrationId = await t
+    .withIdentity(staff)
+    .mutation(api.registrations.register, { tripId, ...validParticipant });
+  await t.mutation(internal.registrations.recordPaymentLinkSent, {
+    registrationId,
+    sessionId: 'cs_test_paid_after_cancel',
+    sentAt: 1_000,
+    sentBy: staff.subject
+  });
+  await t.withIdentity(staff).mutation(api.registrations.cancel, { registrationId });
+
+  await t.mutation(internal.registrations.markPaidFromStripeSession, {
+    sessionId: 'cs_test_paid_after_cancel'
+  });
+
+  const registration = await t.run((ctx) => ctx.db.get(registrationId));
+  expect(registration).toMatchObject({
+    paymentStatus: 'paid',
+    registrationStatus: 'cancelled'
+  });
+});
+
+test('markPaidFromStripeSession does not create a duplicate Activity Log entry when already Paid', async () => {
+  const t = convexTest(schema, modules);
+  const tripId = await createTrip(t);
+  const registrationId = await t
+    .withIdentity(staff)
+    .mutation(api.registrations.register, { tripId, ...validParticipant });
+  await t
+    .withIdentity(staff)
+    .mutation(api.registrations.setPaymentStatus, { registrationId, paymentStatus: 'paid' });
+  await t.mutation(internal.registrations.recordPaymentLinkSent, {
+    registrationId,
+    sessionId: 'cs_test_already_paid',
+    sentAt: 1_000,
+    sentBy: staff.subject
+  });
+
+  await t.mutation(internal.registrations.markPaidFromStripeSession, {
+    sessionId: 'cs_test_already_paid'
+  });
+
+  const history = await t
+    .withIdentity(staff)
+    .query(api.activityLogs.listByRegistration, { registrationId });
+  expect(history.entries.filter((entry) => entry.changedBy === STRIPE_SYSTEM_ACTOR)).toHaveLength(
+    0
+  );
+});
+
+test('markPaidFromStripeSession is a no-op for an unrecognized session id', async () => {
+  const t = convexTest(schema, modules);
+  const tripId = await createTrip(t);
+  const registrationId = await t
+    .withIdentity(staff)
+    .mutation(api.registrations.register, { tripId, ...validParticipant });
+
+  await expect(
+    t.mutation(internal.registrations.markPaidFromStripeSession, {
+      sessionId: 'cs_test_unknown'
+    })
+  ).resolves.toBeNull();
+
+  const registration = await t.run((ctx) => ctx.db.get(registrationId));
+  expect(registration?.paymentStatus).toBe('unpaid');
+});
+
+test('clearExpiredPaymentLink clears the Payment Link fields when they still match the expired session', async () => {
+  const t = convexTest(schema, modules);
+  const tripId = await createTrip(t);
+  const registrationId = await t
+    .withIdentity(staff)
+    .mutation(api.registrations.register, { tripId, ...validParticipant });
+  await t.mutation(internal.registrations.recordPaymentLinkSent, {
+    registrationId,
+    sessionId: 'cs_test_expired',
+    sentAt: 1_000,
+    sentBy: staff.subject
+  });
+
+  await t.mutation(internal.registrations.clearExpiredPaymentLink, {
+    sessionId: 'cs_test_expired'
+  });
+
+  const registration = await t.run((ctx) => ctx.db.get(registrationId));
+  expect(registration?.paymentStatus).toBe('unpaid');
+  expect(registration?.paymentLinkSessionId).toBeUndefined();
+  expect(registration?.paymentLinkSentAt).toBeUndefined();
+  expect(registration?.paymentLinkSentBy).toBeUndefined();
+});
+
+test('clearExpiredPaymentLink leaves a since-resent Payment Link untouched', async () => {
+  const t = convexTest(schema, modules);
+  const tripId = await createTrip(t);
+  const registrationId = await t
+    .withIdentity(staff)
+    .mutation(api.registrations.register, { tripId, ...validParticipant });
+  await t.mutation(internal.registrations.recordPaymentLinkSent, {
+    registrationId,
+    sessionId: 'cs_test_old',
+    sentAt: 1_000,
+    sentBy: staff.subject
+  });
+  // Staff resent the link before the old session's expiry notification arrived.
+  await t.mutation(internal.registrations.recordPaymentLinkSent, {
+    registrationId,
+    sessionId: 'cs_test_new',
+    sentAt: 2_000,
+    sentBy: staff.subject
+  });
+
+  await t.mutation(internal.registrations.clearExpiredPaymentLink, {
+    sessionId: 'cs_test_old'
+  });
+
+  const registration = await t.run((ctx) => ctx.db.get(registrationId));
+  expect(registration).toMatchObject({
+    paymentLinkSessionId: 'cs_test_new',
+    paymentLinkSentAt: 2_000
+  });
+});
+
+test('clearExpiredPaymentLink is a no-op for an unrecognized session id', async () => {
+  const t = convexTest(schema, modules);
+  await expect(
+    t.mutation(internal.registrations.clearExpiredPaymentLink, {
+      sessionId: 'cs_test_unknown'
+    })
+  ).resolves.toBeNull();
 });

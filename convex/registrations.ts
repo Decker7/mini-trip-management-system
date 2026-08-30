@@ -239,6 +239,75 @@ export const recordPaymentLinkSent = internalMutation({
   }
 });
 
+/**
+ * The Activity Log actor for a Payment Status change made by Stripe's webhook
+ * rather than a Staff/Admin User, so the history can tell the two apart.
+ */
+export const STRIPE_SYSTEM_ACTOR = 'system:stripe';
+
+/**
+ * A Payment Link's Checkout Session was paid. Looked up by the Registration's
+ * *current* `paymentLinkSessionId` — if a link was resent since this session
+ * was created, no Registration matches it any more and this is a no-op, which
+ * is intentional (see `clearExpiredPaymentLink` for the same reasoning).
+ *
+ * Payment Status is set to Paid unconditionally, even if the Registration was
+ * separately cancelled after the link was sent: money moved, so the record
+ * says so — see ADR-0002.
+ */
+export const markPaidFromStripeSession = internalMutation({
+  args: { sessionId: v.string() },
+  handler: async (ctx, args) => {
+    const registration = await ctx.db
+      .query('registrations')
+      .withIndex('by_paymentLinkSessionId', (q) => q.eq('paymentLinkSessionId', args.sessionId))
+      .unique();
+    if (!registration) {
+      return;
+    }
+
+    const oldPaymentStatus = registration.paymentStatus;
+    await ctx.db.patch(registration._id, {
+      paymentStatus: 'paid',
+      paymentLinkSessionId: undefined,
+      paymentLinkSentAt: undefined,
+      paymentLinkSentBy: undefined
+    });
+    await recordActivityLog(ctx, {
+      registrationId: registration._id,
+      field: 'paymentStatus',
+      oldValue: oldPaymentStatus,
+      newValue: 'paid',
+      changedBy: STRIPE_SYSTEM_ACTOR
+    });
+  }
+});
+
+/**
+ * A Payment Link's Checkout Session expired unpaid. Looked up the same way as
+ * `markPaidFromStripeSession`: only a Registration whose `paymentLinkSessionId`
+ * still equals this expired session's id is touched, so an expiry
+ * notification arriving after a resend can't clear the newer link's fields.
+ */
+export const clearExpiredPaymentLink = internalMutation({
+  args: { sessionId: v.string() },
+  handler: async (ctx, args) => {
+    const registration = await ctx.db
+      .query('registrations')
+      .withIndex('by_paymentLinkSessionId', (q) => q.eq('paymentLinkSessionId', args.sessionId))
+      .unique();
+    if (!registration) {
+      return;
+    }
+
+    await ctx.db.patch(registration._id, {
+      paymentLinkSessionId: undefined,
+      paymentLinkSentAt: undefined,
+      paymentLinkSentBy: undefined
+    });
+  }
+});
+
 export const listAll = query({
   args: {
     search: v.optional(v.string()),

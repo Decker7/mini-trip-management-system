@@ -46,7 +46,8 @@ export default defineSchema({
       'participantId',
       'tripId',
       'paymentStatus'
-    ]),
+    ])
+    .index('by_paymentLinkSessionId', ['paymentLinkSessionId']),
 
   activityLogs: defineTable({
     registrationId: v.id('registrations'),
