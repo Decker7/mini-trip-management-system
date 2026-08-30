@@ -21,7 +21,7 @@ export function RoleGate({ children }: { children: React.ReactNode }) {
     return (
       <Modal
         title='No access yet'
-        description='Your account has not been assigned a role yet. Contact an Admin to get access, then sign in again.'
+        description='Your account is Unassigned — it has not been given a role yet. Contact an Admin to get access, then sign in again.'
         isOpen
         onClose={handleSignOut}
       >
