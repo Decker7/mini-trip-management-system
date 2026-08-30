@@ -1,5 +1,6 @@
 import { ConvexError, v } from 'convex/values';
 import { internalMutation, internalQuery, mutation, query } from './_generated/server';
+import type { MutationCtx } from './_generated/server';
 import type { Doc, Id } from './_generated/dataModel';
 import { requireAssignedRole } from './lib/identity';
 import { recordActivityLog } from './lib/activityLog';
@@ -246,6 +247,22 @@ export const recordPaymentLinkSent = internalMutation({
 export const STRIPE_SYSTEM_ACTOR = 'system:stripe';
 
 /**
+ * Finds the Registration whose *current* `paymentLinkSessionId` matches a
+ * Stripe Checkout Session id, or `null` if none does — which is the same
+ * lookup both `markPaidFromStripeSession` and `clearExpiredPaymentLink` use
+ * to guard against acting on a session a resend has since superseded.
+ */
+async function findRegistrationByPaymentLinkSessionId(
+  ctx: MutationCtx,
+  sessionId: string
+): Promise<Doc<'registrations'> | null> {
+  return await ctx.db
+    .query('registrations')
+    .withIndex('by_paymentLinkSessionId', (q) => q.eq('paymentLinkSessionId', sessionId))
+    .unique();
+}
+
+/**
  * A Payment Link's Checkout Session was paid. Looked up by the Registration's
  * *current* `paymentLinkSessionId` — if a link was resent since this session
  * was created, no Registration matches it any more and this is a no-op, which
@@ -258,10 +275,7 @@ export const STRIPE_SYSTEM_ACTOR = 'system:stripe';
 export const markPaidFromStripeSession = internalMutation({
   args: { sessionId: v.string() },
   handler: async (ctx, args) => {
-    const registration = await ctx.db
-      .query('registrations')
-      .withIndex('by_paymentLinkSessionId', (q) => q.eq('paymentLinkSessionId', args.sessionId))
-      .unique();
+    const registration = await findRegistrationByPaymentLinkSessionId(ctx, args.sessionId);
     if (!registration) {
       return;
     }
@@ -292,10 +306,7 @@ export const markPaidFromStripeSession = internalMutation({
 export const clearExpiredPaymentLink = internalMutation({
   args: { sessionId: v.string() },
   handler: async (ctx, args) => {
-    const registration = await ctx.db
-      .query('registrations')
-      .withIndex('by_paymentLinkSessionId', (q) => q.eq('paymentLinkSessionId', args.sessionId))
-      .unique();
+    const registration = await findRegistrationByPaymentLinkSessionId(ctx, args.sessionId);
     if (!registration) {
       return;
     }
