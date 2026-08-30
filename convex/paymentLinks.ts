@@ -52,6 +52,9 @@ export const sendPaymentLink = action({
       cancel_url: `${env.APP_URL}/payment/cancelled`,
       metadata: { registrationId: args.registrationId }
     });
+    if (!session.url) {
+      throw new ConvexError('Stripe did not return a checkout URL for this session.');
+    }
 
     const emailResponse = await fetch('https://api.resend.com/emails', {
       method: 'POST',
