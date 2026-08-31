@@ -8,6 +8,8 @@ import type { Id } from '../../../../convex/_generated/dataModel';
 import { Card, CardContent } from '@/components/ui/card';
 import { Icons } from '@/components/icons';
 import { Input } from '@/components/ui/input';
+import { PH_MASK_CLASS } from '@/lib/posthog-config';
+import { cn } from '@/lib/utils';
 import {
   Select,
   SelectContent,
@@ -157,18 +159,18 @@ export function ParticipantListing() {
                   <TableCell className='font-medium'>
                     <Link
                       href={`/dashboard/participants/${entry.participantId}`}
-                      className='hover:underline'
+                      className={cn(PH_MASK_CLASS, 'hover:underline')}
                     >
                       {entry.fullName}
                     </Link>
                   </TableCell>
-                  <TableCell>{entry.icPassportNumber}</TableCell>
+                  <TableCell className={PH_MASK_CLASS}>{entry.icPassportNumber}</TableCell>
                   <TableCell>
                     <Link href={`/dashboard/trips/${entry.tripId}`} className='hover:underline'>
                       {entry.tripName}
                     </Link>
                   </TableCell>
-                  <TableCell>{entry.email}</TableCell>
+                  <TableCell className={PH_MASK_CLASS}>{entry.email}</TableCell>
                   <TableCell>{PAYMENT_STATUS_LABEL[entry.paymentStatus]}</TableCell>
                   <TableCell>
                     <RegistrationStatusBadge status={entry.registrationStatus} />

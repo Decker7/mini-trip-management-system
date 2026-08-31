@@ -2,7 +2,9 @@
 
 import { useUser } from '@clerk/nextjs';
 
-export type UserRole = 'admin' | 'staff' | undefined;
+export type { UserRole, AssignedRole } from '@/lib/user-role';
+export { isAssignedRole } from '@/lib/user-role';
+import type { UserRole } from '@/lib/user-role';
 
 /**
  * The signed-in User's Admin/Staff role, read client-side from Clerk's

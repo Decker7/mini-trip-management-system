@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { formatDistanceToNow } from 'date-fns';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Icons } from '@/components/icons';
+import { Mask } from '@/components/mask';
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
 
@@ -30,7 +31,11 @@ function entryIcon(entry: ActivityEntry) {
 
 function entryDescription(entry: ActivityEntry) {
   const fieldLabel = entry.field === 'paymentStatus' ? 'Payment' : 'Registration';
-  return `${fieldLabel} changed to ${capitalize(entry.newValue)} for ${entry.participantName}`;
+  return (
+    <>
+      {fieldLabel} changed to {capitalize(entry.newValue)} for <Mask>{entry.participantName}</Mask>
+    </>
+  );
 }
 
 export function RecentActivityFeed({
@@ -77,8 +82,13 @@ export function RecentActivityFeed({
                 <div className='min-w-0 flex-1'>
                   <p className='text-sm'>{entryDescription(entry)}</p>
                   <p className='text-muted-foreground truncate text-xs'>
-                    {entry.tripName} · {actorName} ·{' '}
-                    {formatDistanceToNow(entry.changedAt, { addSuffix: true })}
+                    {entry.tripName} ·{' '}
+                    {actorName === 'You' || actorName === 'A team member' ? (
+                      actorName
+                    ) : (
+                      <Mask>{actorName}</Mask>
+                    )}{' '}
+                    · {formatDistanceToNow(entry.changedAt, { addSuffix: true })}
                   </p>
                 </div>
               </div>

@@ -6,6 +6,7 @@ import { format } from 'date-fns';
 import { api } from '../../../../convex/_generated/api';
 import type { Id } from '../../../../convex/_generated/dataModel';
 import { Button } from '@/components/ui/button';
+import { Mask } from '@/components/mask';
 import {
   Sheet,
   SheetContent,
@@ -61,7 +62,7 @@ function HistoryBody({ registrationId }: { registrationId: Id<'registrations'> }
               {/* Until Staff accounts (#12) exist there is no name to resolve a
                   changer's id against, so show the id itself — and "You" when
                   it is the signed-in user, which is the common case. */}
-              {me && entry.changedBy === me.subject ? 'you' : entry.changedBy}
+              {me && entry.changedBy === me.subject ? 'you' : <Mask>{entry.changedBy}</Mask>}
             </p>
           </li>
         ))}
@@ -89,7 +90,8 @@ export function RegistrationHistorySheet({
         <SheetHeader>
           <SheetTitle>Registration history</SheetTitle>
           <SheetDescription>
-            Payment Status and Registration Status changes for {participantName}, newest first.
+            Payment Status and Registration Status changes for <Mask>{participantName}</Mask>,
+            newest first.
           </SheetDescription>
         </SheetHeader>
         <div className='flex-1 overflow-auto'>

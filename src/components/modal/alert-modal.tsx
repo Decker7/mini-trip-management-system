@@ -11,7 +11,7 @@ interface AlertModalProps {
   onConfirm: () => void;
   loading: boolean;
   title?: string;
-  description?: string;
+  description?: React.ReactNode;
   confirmLabel?: string;
   confirmVariant?: VariantProps<typeof buttonVariants>['variant'];
 }

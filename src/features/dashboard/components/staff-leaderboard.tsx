@@ -1,5 +1,6 @@
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Mask } from '@/components/mask';
 import { Skeleton } from '@/components/ui/skeleton';
 
 type StaffActivityEntry = { staffId: string; count: number };
@@ -41,10 +42,18 @@ export function StaffLeaderboard({
                   {index + 1}
                 </span>
                 <Avatar className='size-7 shrink-0'>
-                  <AvatarFallback className='text-xs'>{initials(name)}</AvatarFallback>
+                  <AvatarFallback className='text-xs'>
+                    {name === 'You' || name === 'Unknown account' ? (
+                      initials(name)
+                    ) : (
+                      <Mask>{initials(name)}</Mask>
+                    )}
+                  </AvatarFallback>
                 </Avatar>
                 <div className='min-w-0 flex-1'>
-                  <p className='truncate text-sm font-medium'>{name}</p>
+                  <p className='truncate text-sm font-medium'>
+                    {name === 'You' || name === 'Unknown account' ? name : <Mask>{name}</Mask>}
+                  </p>
                   <div className='bg-muted mt-1 h-1.5 w-full overflow-hidden rounded-full'>
                     <div
                       className='bg-primary h-full rounded-full transition-all'

@@ -6,6 +6,7 @@ import { formatDistanceToNow } from 'date-fns';
 import { api } from '../../../../convex/_generated/api';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Mask } from '@/components/mask';
 import { Skeleton } from '@/components/ui/skeleton';
 
 const PANEL_LIMIT = 6;
@@ -36,11 +37,13 @@ export function PendingPaymentsPanel() {
             <Link
               key={row._id}
               href={`/dashboard/trips/${row.tripId}`}
-              aria-label={`View ${row.fullName}'s registration for ${row.tripName}`}
+              aria-label={`View registration for ${row.tripName}`}
               className='flex items-center gap-3 rounded-lg -mx-1 px-1 py-2 transition-colors hover:bg-muted/50'
             >
               <div className='min-w-0 flex-1'>
-                <p className='truncate text-sm font-medium'>{row.fullName}</p>
+                <p className='truncate text-sm font-medium'>
+                  <Mask>{row.fullName}</Mask>
+                </p>
                 <p className='text-muted-foreground truncate text-xs'>{row.tripName}</p>
               </div>
               <div className='flex shrink-0 flex-col items-end gap-1'>

@@ -4,7 +4,7 @@ import { useClerk, useUser } from '@clerk/nextjs';
 import { useConvexAuth } from 'convex/react';
 import { Modal } from '@/components/ui/modal';
 import { Button } from '@/components/ui/button';
-import { useUserRole } from '@/hooks/use-user-role';
+import { isAssignedRole, useUserRole } from '@/hooks/use-user-role';
 
 /**
  * Every dashboard query rejects a signed-in user with no Admin/Staff role
@@ -28,7 +28,7 @@ export function RoleGate({ children }: { children: React.ReactNode }) {
     return null;
   }
 
-  if (isLoaded && role !== 'admin' && role !== 'staff') {
+  if (isLoaded && !isAssignedRole(role)) {
     const handleSignOut = () => signOut({ redirectUrl: '/auth/sign-in' });
     return (
       <Modal
