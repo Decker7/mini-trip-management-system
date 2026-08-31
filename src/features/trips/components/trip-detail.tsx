@@ -46,7 +46,10 @@ export function TripDetail({ tripId }: { tripId: Id<'trips'> }) {
     setIsDeleting(true);
     try {
       await removeTrip({ tripId });
-      posthog.capture(TRIP_DELETED_EVENT);
+      posthog.capture(TRIP_DELETED_EVENT, {
+        destination: trip?.destination,
+        capacity: trip?.capacity
+      });
       toast.success('Trip deleted');
       router.push('/dashboard/trips');
     } catch (error) {
