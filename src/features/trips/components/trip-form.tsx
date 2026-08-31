@@ -11,6 +11,8 @@ import { api } from '../../../../convex/_generated/api';
 import type { Id } from '../../../../convex/_generated/dataModel';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
+import posthog from 'posthog-js';
+import { TRIP_CREATED_EVENT } from '@/lib/posthog-events';
 
 export type TripInitialData = {
   _id: Id<'trips'>;
@@ -66,10 +68,18 @@ export function TripForm({
           toast.success('Trip updated');
         } else {
           await createTrip(payload);
+          posthog.capture(TRIP_CREATED_EVENT, {
+            destination: payload.destination,
+            capacity: payload.capacity
+          });
           toast.success('Trip created');
         }
         router.push('/dashboard/trips');
       } catch (error) {
+        // Ties the failure to this User's PostHog session replay, which
+        // Sentry's automatic capture never sees since this error is caught,
+        // not unhandled.
+        posthog.captureException(error);
         toast.error(error instanceof Error ? error.message : "Couldn't save the trip. Try again.");
       }
     }
