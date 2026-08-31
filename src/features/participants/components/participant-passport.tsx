@@ -7,6 +7,7 @@ import { toast } from 'sonner';
 import { api } from '../../../../convex/_generated/api';
 import type { Id } from '../../../../convex/_generated/dataModel';
 import { Icons } from '@/components/icons';
+import { PH_NO_CAPTURE_CLASS } from '@/lib/posthog-config';
 import { cn, formatBytes } from '@/lib/utils';
 import { MAX_PASSPORT_FILE_SIZE, PASSPORT_ACCEPT } from '@/features/participants/lib/passport';
 
@@ -57,7 +58,10 @@ export function ParticipantPassport({
           href={passportUrl}
           target='_blank'
           rel='noreferrer'
-          className='text-primary inline-flex items-center gap-2 text-sm font-medium hover:underline'
+          className={cn(
+            PH_NO_CAPTURE_CLASS,
+            'text-primary inline-flex items-center gap-2 text-sm font-medium hover:underline'
+          )}
         >
           <Icons.page className='h-4 w-4' />
           View current passport

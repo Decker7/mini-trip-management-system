@@ -10,6 +10,8 @@ import {
   DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu';
 import { UserAvatarProfile } from '@/components/user-avatar-profile';
+import { PH_MASK_CLASS } from '@/lib/posthog-config';
+import { cn } from '@/lib/utils';
 import { SignOutButton, useUser } from '@clerk/nextjs';
 import { useRouter } from 'next/navigation';
 export function UserNav() {
@@ -27,8 +29,10 @@ export function UserNav() {
           <DropdownMenuGroup>
             <DropdownMenuLabel className='font-normal'>
               <div className='flex flex-col space-y-1'>
-                <p className='text-sm leading-none font-medium'>{user.fullName}</p>
-                <p className='text-muted-foreground text-xs leading-none'>
+                <p className={cn(PH_MASK_CLASS, 'text-sm leading-none font-medium')}>
+                  {user.fullName}
+                </p>
+                <p className={cn(PH_MASK_CLASS, 'text-muted-foreground text-xs leading-none')}>
                   {user.emailAddresses[0].emailAddress}
                 </p>
               </div>

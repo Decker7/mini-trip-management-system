@@ -4,6 +4,8 @@ import { useQuery_experimental as useQuery } from 'convex/react';
 import { api } from '../../../../convex/_generated/api';
 import type { Id } from '../../../../convex/_generated/dataModel';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { PH_MASK_CLASS } from '@/lib/posthog-config';
+import { cn } from '@/lib/utils';
 import { ParticipantPassport } from './participant-passport';
 
 export function ParticipantDetail({ participantId }: { participantId: Id<'participants'> }) {
@@ -28,20 +30,22 @@ export function ParticipantDetail({ participantId }: { participantId: Id<'partic
     <div className='mx-auto w-full max-w-3xl space-y-6'>
       <Card>
         <CardHeader>
-          <CardTitle className='text-2xl font-bold'>{participant.fullName}</CardTitle>
+          <CardTitle className={cn(PH_MASK_CLASS, 'text-2xl font-bold')}>
+            {participant.fullName}
+          </CardTitle>
         </CardHeader>
         <CardContent className='grid grid-cols-1 gap-6 md:grid-cols-2'>
           <div>
             <p className='text-muted-foreground text-sm'>IC/Passport Number</p>
-            <p className='font-medium'>{participant.icPassportNumber}</p>
+            <p className={cn(PH_MASK_CLASS, 'font-medium')}>{participant.icPassportNumber}</p>
           </div>
           <div>
             <p className='text-muted-foreground text-sm'>Email</p>
-            <p className='font-medium'>{participant.email}</p>
+            <p className={cn(PH_MASK_CLASS, 'font-medium')}>{participant.email}</p>
           </div>
           <div>
             <p className='text-muted-foreground text-sm'>Phone</p>
-            <p className='font-medium'>{participant.phone}</p>
+            <p className={cn(PH_MASK_CLASS, 'font-medium')}>{participant.phone}</p>
           </div>
         </CardContent>
       </Card>

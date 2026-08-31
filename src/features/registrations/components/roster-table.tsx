@@ -7,7 +7,10 @@ import { toast } from 'sonner';
 import { api } from '../../../../convex/_generated/api';
 import type { Id } from '../../../../convex/_generated/dataModel';
 import { getErrorMessage } from '@/lib/errors';
+import { PH_MASK_CLASS } from '@/lib/posthog-config';
+import { cn } from '@/lib/utils';
 import { AlertModal } from '@/components/modal/alert-modal';
+import { Mask } from '@/components/mask';
 import { Button } from '@/components/ui/button';
 import {
   Select,
@@ -107,7 +110,11 @@ export function RosterTable({
         loading={isCancelling}
         title='Cancel this registration?'
         description={
-          cancelTarget ? `${cancelTarget.name}'s slot on this Trip will be freed up.` : undefined
+          cancelTarget ? (
+            <>
+              <Mask>{cancelTarget.name}</Mask>&apos;s slot on this Trip will be freed up.
+            </>
+          ) : undefined
         }
         confirmLabel='Cancel Registration'
       />
@@ -119,9 +126,11 @@ export function RosterTable({
         loading={isSendingLink}
         title='Send a payment link?'
         description={
-          linkTarget
-            ? `Send a RM ${tripPrice?.toFixed(2)} payment link to ${linkTarget.email}?`
-            : undefined
+          linkTarget ? (
+            <>
+              Send a RM {tripPrice?.toFixed(2)} payment link to <Mask>{linkTarget.email}</Mask>?
+            </>
+          ) : undefined
         }
         confirmLabel='Send Payment Link'
         confirmVariant='default'
@@ -162,10 +171,10 @@ export function RosterTable({
               entry.paymentStatus === 'paid' && entry.paymentConfirmedByStripe;
             return (
               <TableRow key={entry._id}>
-                <TableCell className='font-medium'>{entry.fullName}</TableCell>
-                <TableCell>{entry.icPassportNumber}</TableCell>
-                <TableCell>{entry.email}</TableCell>
-                <TableCell>{entry.phone}</TableCell>
+                <TableCell className={cn(PH_MASK_CLASS, 'font-medium')}>{entry.fullName}</TableCell>
+                <TableCell className={PH_MASK_CLASS}>{entry.icPassportNumber}</TableCell>
+                <TableCell className={PH_MASK_CLASS}>{entry.email}</TableCell>
+                <TableCell className={PH_MASK_CLASS}>{entry.phone}</TableCell>
                 <TableCell>
                   <Select
                     value={entry.paymentStatus}
@@ -208,9 +217,11 @@ export function RosterTable({
                     <p className='text-muted-foreground mt-1 text-xs'>
                       Link sent {formatDistanceToNow(entry.paymentLinkSentAt, { addSuffix: true })}{' '}
                       by{' '}
-                      {me && entry.paymentLinkSentBy === me.subject
-                        ? 'you'
-                        : entry.paymentLinkSentBy}
+                      {me && entry.paymentLinkSentBy === me.subject ? (
+                        'you'
+                      ) : (
+                        <Mask>{entry.paymentLinkSentBy}</Mask>
+                      )}
                     </p>
                   )}
                 </TableCell>

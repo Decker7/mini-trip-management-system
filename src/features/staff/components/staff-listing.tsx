@@ -5,6 +5,7 @@ import { useAction } from 'convex/react';
 import { toast } from 'sonner';
 import { api } from '../../../../convex/_generated/api';
 import { AlertModal } from '@/components/modal/alert-modal';
+import { Mask } from '@/components/mask';
 import { Button } from '@/components/ui/button';
 import {
   Select,
@@ -22,6 +23,7 @@ import {
   TableRow
 } from '@/components/ui/table';
 import { Icons } from '@/components/icons';
+import { PH_MASK_CLASS } from '@/lib/posthog-config';
 import { InviteStaffSheet } from './invite-staff-sheet';
 
 type StaffAccount = {
@@ -116,7 +118,15 @@ export function StaffListing() {
         onConfirm={handleConfirmRevoke}
         loading={isRevoking}
         title='Revoke access?'
-        description={`"${revokeTarget?.fullName || revokeTarget?.email}" will immediately lose access to the system. You can restore it later by assigning them a role again.`}
+        description={
+          revokeTarget ? (
+            <>
+              &quot;<Mask>{revokeTarget.fullName || revokeTarget.email}</Mask>&quot; will
+              immediately lose access to the system. You can restore it later by assigning them a
+              role again.
+            </>
+          ) : undefined
+        }
         confirmLabel='Revoke access'
       />
 
@@ -205,8 +215,8 @@ function StaffTable({
           ) : (
             users.map((user) => (
               <TableRow key={user.userId}>
-                <TableCell>{user.fullName || '—'}</TableCell>
-                <TableCell>{user.email}</TableCell>
+                <TableCell className={PH_MASK_CLASS}>{user.fullName || '—'}</TableCell>
+                <TableCell className={PH_MASK_CLASS}>{user.email}</TableCell>
                 <TableCell>
                   <Select
                     value={user.role ?? undefined}

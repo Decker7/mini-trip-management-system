@@ -1,8 +1,11 @@
 'use client';
 import { ClerkProvider } from '@clerk/nextjs';
+import posthog from 'posthog-js';
+import { PostHogProvider } from 'posthog-js/react';
 import React from 'react';
 import { ActiveThemeProvider } from '../themes/active-theme';
 import ConvexClientProvider from './convex-client-provider';
+import { PostHogIdentify } from './posthog-identify';
 import QueryProvider from './query-provider';
 
 export default function Providers({
@@ -34,7 +37,12 @@ export default function Providers({
           }}
         >
           <ConvexClientProvider>
-            <QueryProvider>{children}</QueryProvider>
+            <QueryProvider>
+              <PostHogProvider client={posthog}>
+                <PostHogIdentify />
+                {children}
+              </PostHogProvider>
+            </QueryProvider>
           </ConvexClientProvider>
         </ClerkProvider>
       </ActiveThemeProvider>

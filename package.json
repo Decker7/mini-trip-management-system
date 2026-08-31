@@ -50,6 +50,7 @@
     "nextjs-toploader": "^3.9.17",
     "nuqs": "^2.8.9",
     "postcss": "8.5.25",
+    "posthog-js": "^1.418.10",
     "react": "19.2.4",
     "react-day-picker": "^10.0.1",
     "react-dom": "19.2.4",
