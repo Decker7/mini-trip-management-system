@@ -2,9 +2,11 @@
 
 Research pass on PostHog (posthog.com) as a potential analytics/observability addition to this
 repo. Every factual claim below is linked to the specific PostHog docs/pricing page it came from,
-pulled live on **2026-08-31**. Passages that are this repo's own reasoning rather than a PostHog
-claim are marked with a **> Analysis:** blockquote — treat everything outside those blockquotes as
-"PostHog says," and everything inside them as "we think."
+pulled live on **2026-08-31**. Within each numbered section, passages that are this repo's own
+reasoning rather than a PostHog claim are marked with a **> Analysis:** blockquote — treat
+prose outside those blockquotes as "PostHog says," and everything inside them as "we think." The
+closing "Open questions" section is entirely our own material, not PostHog claims, regardless of
+blockquote formatting.
 
 Community sentiment (secondary source, not verified against PostHog docs) is called out
 separately wherever it appears and is never used as the basis for a factual claim.

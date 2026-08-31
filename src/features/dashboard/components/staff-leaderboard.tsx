@@ -42,7 +42,13 @@ export function StaffLeaderboard({
                   {index + 1}
                 </span>
                 <Avatar className='size-7 shrink-0'>
-                  <AvatarFallback className='text-xs'>{initials(name)}</AvatarFallback>
+                  <AvatarFallback className='text-xs'>
+                    {name === 'You' || name === 'Unknown account' ? (
+                      initials(name)
+                    ) : (
+                      <Mask>{initials(name)}</Mask>
+                    )}
+                  </AvatarFallback>
                 </Avatar>
                 <div className='min-w-0 flex-1'>
                   <p className='truncate text-sm font-medium'>
