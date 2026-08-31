@@ -52,16 +52,43 @@ describe('resolvePostHogSync', () => {
     expect(resolvePostHogSync(null, null)).toEqual({ type: 'noop' });
   });
 
-  it('does not repeat identify() when the same person is still identified', () => {
-    expect(resolvePostHogSync('user_123', identity)).toEqual({ type: 'noop' });
+  it('does not repeat identify() when the same person is still identified with unchanged fields', () => {
+    expect(resolvePostHogSync(identity, { ...identity })).toEqual({ type: 'noop' });
   });
 
   it('resets on a real sign-out transition (was identified, now null)', () => {
-    expect(resolvePostHogSync('user_123', null)).toEqual({ type: 'reset' });
+    expect(resolvePostHogSync(identity, null)).toEqual({ type: 'reset' });
   });
 
   it('re-identifies when a different person is now signed in', () => {
     const other = { ...identity, distinctId: 'user_456' };
-    expect(resolvePostHogSync('user_123', other)).toEqual({ type: 'identify', identity: other });
+    expect(resolvePostHogSync(identity, other)).toEqual({ type: 'identify', identity: other });
+  });
+
+  it('re-identifies when the same person is promoted from Staff to Admin', () => {
+    const promoted = {
+      ...identity,
+      properties: { ...identity.properties, role: 'admin' as const }
+    };
+    expect(resolvePostHogSync(identity, promoted)).toEqual({
+      type: 'identify',
+      identity: promoted
+    });
+  });
+
+  it('re-identifies when the same person changes their name in Clerk', () => {
+    const renamed = { ...identity, properties: { ...identity.properties, name: 'Sylvia Lim' } };
+    expect(resolvePostHogSync(identity, renamed)).toEqual({ type: 'identify', identity: renamed });
+  });
+
+  it('re-identifies when the same person changes their email in Clerk', () => {
+    const reEmailed = {
+      ...identity,
+      properties: { ...identity.properties, email: 'sylvia.lim@example.com' }
+    };
+    expect(resolvePostHogSync(identity, reEmailed)).toEqual({
+      type: 'identify',
+      identity: reEmailed
+    });
   });
 });

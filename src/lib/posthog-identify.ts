@@ -41,23 +41,38 @@ export type PostHogSyncAction =
   | { type: 'reset' }
   | { type: 'noop' };
 
+function identitiesEqual(
+  a: PostHogIdentity | null | undefined,
+  b: PostHogIdentity | null
+): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  return (
+    a.distinctId === b.distinctId &&
+    a.properties.email === b.properties.email &&
+    a.properties.name === b.properties.name &&
+    a.properties.role === b.properties.role
+  );
+}
+
 /**
- * Decides what to do with PostHog's identified person, given the distinct id
- * we last synced it to. Only ever returns `identify`/`reset` when the
- * resolved identity actually changed — including the very first call, where
- * `lastSyncedId` is the `undefined` sentinel (distinct from `null`, meaning
- * "resolved to no identity"): that lets a `null` identity still sync once on
- * load, clearing any identity PostHog's own persisted storage carried over
- * from a previous session on this browser — without ever repeating `reset()`
- * for an unchanged "still no identity" state, which would otherwise
- * fragment an ongoing session's replay.
+ * Decides what to do with PostHog's identified person, given the identity we
+ * last synced it to. Only ever returns `identify`/`reset` when the resolved
+ * identity actually changed — comparing every field, not just distinctId, so
+ * a role/name/email change for the *same* person (e.g. promoted Staff to
+ * Admin) still re-syncs — including the very first call, where `lastSynced`
+ * is the `undefined` sentinel (distinct from `null`, meaning "resolved to no
+ * identity"): that lets a `null` identity still sync once on load, clearing
+ * any identity PostHog's own persisted storage carried over from a previous
+ * session on this browser — without ever repeating `reset()` for an
+ * unchanged "still no identity" state, which would otherwise fragment an
+ * ongoing session's replay.
  */
 export function resolvePostHogSync(
-  lastSyncedId: string | null | undefined,
+  lastSynced: PostHogIdentity | null | undefined,
   identity: PostHogIdentity | null
 ): PostHogSyncAction {
-  const distinctId = identity?.distinctId ?? null;
-  if (distinctId === lastSyncedId) {
+  if (identitiesEqual(lastSynced, identity)) {
     return { type: 'noop' };
   }
   return identity ? { type: 'identify', identity } : { type: 'reset' };

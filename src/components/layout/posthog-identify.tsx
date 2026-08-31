@@ -4,7 +4,11 @@ import { useEffect, useRef } from 'react';
 import { useUser } from '@clerk/nextjs';
 import posthog from 'posthog-js';
 import { useUserRole } from '@/hooks/use-user-role';
-import { resolvePostHogIdentity, resolvePostHogSync } from '@/lib/posthog-identify';
+import {
+  resolvePostHogIdentity,
+  resolvePostHogSync,
+  type PostHogIdentity
+} from '@/lib/posthog-identify';
 
 /**
  * Keeps PostHog's identified person in sync with the signed-in Staff/Admin
@@ -15,7 +19,7 @@ import { resolvePostHogIdentity, resolvePostHogSync } from '@/lib/posthog-identi
 export function PostHogIdentify() {
   const { user, isLoaded } = useUser();
   const role = useUserRole();
-  const lastSyncedRef = useRef<string | null | undefined>(undefined);
+  const lastSyncedRef = useRef<PostHogIdentity | null | undefined>(undefined);
 
   const userId = user?.id;
   const userFullName = user?.fullName;
@@ -31,7 +35,7 @@ export function PostHogIdentify() {
     const action = resolvePostHogSync(lastSyncedRef.current, identity);
     if (action.type === 'noop') return;
 
-    lastSyncedRef.current = identity?.distinctId ?? null;
+    lastSyncedRef.current = identity;
     if (action.type === 'identify') {
       posthog.identify(action.identity.distinctId, action.identity.properties);
     } else {
