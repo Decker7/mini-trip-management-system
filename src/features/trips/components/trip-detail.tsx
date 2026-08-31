@@ -1,10 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useMutation, useQuery } from 'convex/react';
 import { toast } from 'sonner';
+import posthog from 'posthog-js';
+import { useFeatureFlagEnabled } from 'posthog-js/react';
 import { api } from '../../../../convex/_generated/api';
 import type { Id } from '../../../../convex/_generated/dataModel';
 import { AlertModal } from '@/components/modal/alert-modal';
@@ -17,6 +19,8 @@ import { todayDateOnlyString } from '@/features/trips/lib/date';
 import { RegisterParticipantSheet } from '@/features/registrations/components/register-participant-sheet';
 import { RosterTable } from '@/features/registrations/components/roster-table';
 import { TripStatusBadge } from './trip-status-badge';
+import { TRIP_ANALYTICS_ROLLOUT_FLAG } from '@/lib/feature-flags';
+import { TRIP_DELETED_EVENT } from '@/lib/posthog-events';
 
 export function TripDetail({ tripId }: { tripId: Id<'trips'> }) {
   const router = useRouter();
@@ -25,17 +29,31 @@ export function TripDetail({ tripId }: { tripId: Id<'trips'> }) {
   const trip = useQuery(api.trips.get, { tripId, today: todayDateOnlyString() });
   const roster = useQuery(api.registrations.listByTrip, { tripId });
   const removeTrip = useMutation(api.trips.remove);
+  const isTripAnalyticsEnabled = useFeatureFlagEnabled(TRIP_ANALYTICS_ROLLOUT_FLAG);
 
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  // Tags this session's subsequent events with the Trip, so PostHog insights
+  // can be filtered per-trip instead of only per-user. Trip name/destination
+  // are Trip metadata, never Participant PII.
+  useEffect(() => {
+    if (!isTripAnalyticsEnabled || !trip) return;
+    posthog.group('trip', trip._id, { name: trip.name, destination: trip.destination });
+  }, [isTripAnalyticsEnabled, trip]);
 
   async function handleConfirmDelete() {
     setIsDeleting(true);
     try {
       await removeTrip({ tripId });
+      posthog.capture(TRIP_DELETED_EVENT, {
+        destination: trip?.destination,
+        capacity: trip?.capacity
+      });
       toast.success('Trip deleted');
       router.push('/dashboard/trips');
     } catch (error) {
+      posthog.captureException(error);
       toast.error(error instanceof Error ? error.message : "Couldn't delete the trip.");
       setIsDeleting(false);
     }
