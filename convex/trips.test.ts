@@ -265,7 +265,21 @@ test('get returns a single trip with derived status, or null when missing', asyn
   expect(missing).toBeNull();
 });
 
-test('remove rejects a Trip that has a Registration, cancelled or not', async () => {
+test('remove rejects a Trip that has an active Registration', async () => {
+  const t = convexTest(schema, modules);
+  const tripId = await t.withIdentity(admin).mutation(api.trips.create, validTrip);
+  await t.withIdentity(staff).mutation(api.registrations.register, {
+    tripId,
+    fullName: 'Jane Doe',
+    icPassportNumber: 'A1234567',
+    email: 'jane@example.com',
+    phone: '+60123456789'
+  });
+
+  await expect(t.withIdentity(admin).mutation(api.trips.remove, { tripId })).rejects.toThrow();
+});
+
+test('remove cascades to delete cancelled Registrations and succeeds', async () => {
   const t = convexTest(schema, modules);
   const tripId = await t.withIdentity(admin).mutation(api.trips.create, validTrip);
   const registrationId = await t.withIdentity(staff).mutation(api.registrations.register, {
@@ -275,10 +289,10 @@ test('remove rejects a Trip that has a Registration, cancelled or not', async ()
     email: 'jane@example.com',
     phone: '+60123456789'
   });
-
-  await expect(t.withIdentity(admin).mutation(api.trips.remove, { tripId })).rejects.toThrow();
-
   await t.withIdentity(staff).mutation(api.registrations.cancel, { registrationId });
 
-  await expect(t.withIdentity(admin).mutation(api.trips.remove, { tripId })).rejects.toThrow();
+  await t.withIdentity(admin).mutation(api.trips.remove, { tripId });
+
+  const missing = await t.withIdentity(staff).query(api.trips.get, { tripId, today: '2026-09-12' });
+  expect(missing).toBeNull();
 });
