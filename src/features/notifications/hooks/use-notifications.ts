@@ -1,12 +1,13 @@
 'use client';
 
-import { useMutation, useQuery } from 'convex/react';
+import { useConvexAuth, useMutation, useQuery } from 'convex/react';
 import { api } from '../../../../convex/_generated/api';
 import type { Id } from '../../../../convex/_generated/dataModel';
 import type { Notification } from '../utils/store';
 
 export function useNotifications() {
-  const result = useQuery(api.notifications.list, {});
+  const { isAuthenticated } = useConvexAuth();
+  const result = useQuery(api.notifications.list, isAuthenticated ? {} : 'skip');
   const markReadMutation = useMutation(api.notifications.markRead);
   const markAllReadMutation = useMutation(api.notifications.markAllRead);
 
