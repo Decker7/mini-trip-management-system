@@ -25,20 +25,23 @@ export function EditParticipantView({ participantId }: { participantId: Id<'part
   const rolloutEnabled = useFeatureFlagEnabled(PARTICIPANT_EDIT_ROLLOUT_FLAG);
 
   const isReady = isLoaded && state.status !== 'pending' && rolloutEnabled !== undefined;
-  const isAssigned = role === 'admin' || role === 'staff';
+  // Editing a Participant's record is Admin-only — CONTEXT.md's Staff
+  // definition only lists view/search, not edit — matching the server-side
+  // `requireAdmin` gate in `participants.update`.
+  const isAdmin = role === 'admin';
   const participantMissing =
     state.status === 'error' || (state.status === 'success' && state.data === null);
   const participant = state.status === 'success' ? state.data : null;
 
   return (
     <PageContainer
-      access={!isReady || (isAssigned && rolloutEnabled && !participantMissing)}
+      access={!isReady || (isAdmin && rolloutEnabled && !participantMissing)}
       accessFallback={
         <div className='text-muted-foreground text-center text-lg'>
           {participantMissing
             ? 'This Participant no longer exists.'
-            : !isAssigned
-              ? 'Only Admins and Staff can edit Participants.'
+            : !isAdmin
+              ? 'Only Admins can edit Participants.'
               : "Editing Participants isn't available for your account yet."}
         </div>
       }

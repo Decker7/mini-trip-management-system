@@ -1,6 +1,6 @@
 import { ConvexError, v } from 'convex/values';
 import { mutation, query } from './_generated/server';
-import { requireAssignedRole } from './lib/identity';
+import { requireAdmin, requireAssignedRole } from './lib/identity';
 import { deriveStatus } from './trips';
 
 /**
@@ -65,7 +65,10 @@ export const update = mutation({
     phone: v.string()
   },
   handler: async (ctx, args) => {
-    await requireAssignedRole(ctx);
+    // Editing a Participant's record isn't listed under what Staff can do in
+    // CONTEXT.md (view/search only) — unlike registering them onto a Trip,
+    // which is. Matches the Admin-only gate `trips.update` already uses.
+    await requireAdmin(ctx);
     const fields = normalizeParticipantFields(args);
 
     const existing = await ctx.db.get(args.participantId);
@@ -95,7 +98,9 @@ export const update = mutation({
 export const remove = mutation({
   args: { participantId: v.id('participants') },
   handler: async (ctx, args) => {
-    await requireAssignedRole(ctx);
+    // Deleting a Participant's record is Admin-only, same reasoning as
+    // `update` above.
+    await requireAdmin(ctx);
     // Derived server-side, not taken from the caller — this date gates
     // whether a paid Trip counts as "completed" below, and trusting a
     // client-supplied date here would let a caller pass a future date to

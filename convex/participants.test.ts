@@ -7,6 +7,7 @@ import schema from './schema';
 
 const modules = import.meta.glob('./**/*.ts');
 
+const admin = { subject: 'user_admin', role: 'admin' as const };
 const staff = { subject: 'user_staff', role: 'staff' as const };
 const roleless = { subject: 'user_roleless' };
 
@@ -198,13 +199,29 @@ test('update rejects an authenticated caller with no role assigned', async () =>
   ).rejects.toThrow();
 });
 
+test('update rejects a Staff caller', async () => {
+  const t = convexTest(schema, modules);
+  const participantId = await seedParticipant(t);
+
+  await expect(
+    t.withIdentity(staff).mutation(api.participants.update, {
+      participantId,
+      ...validParticipant,
+      fullName: 'Jane Roe'
+    })
+  ).rejects.toThrow();
+
+  const participant = await t.run((ctx) => ctx.db.get(participantId));
+  expect(participant!.fullName).toBe(validParticipant.fullName);
+});
+
 test('update rejects a non-existent Participant', async () => {
   const t = convexTest(schema, modules);
   const participantId = await seedParticipant(t);
   await t.run((ctx) => ctx.db.delete(participantId));
 
   await expect(
-    t.withIdentity(staff).mutation(api.participants.update, { participantId, ...validParticipant })
+    t.withIdentity(admin).mutation(api.participants.update, { participantId, ...validParticipant })
   ).rejects.toThrow();
 });
 
@@ -215,7 +232,7 @@ test.each(['fullName', 'icPassportNumber', 'email', 'phone'] as const)(
     const participantId = await seedParticipant(t);
 
     await expect(
-      t.withIdentity(staff).mutation(api.participants.update, {
+      t.withIdentity(admin).mutation(api.participants.update, {
         participantId,
         ...validParticipant,
         [field]: '  '
@@ -237,7 +254,7 @@ test('update rejects an IC/passport number already used by another Participant',
   );
 
   await expect(
-    t.withIdentity(staff).mutation(api.participants.update, {
+    t.withIdentity(admin).mutation(api.participants.update, {
       participantId,
       ...validParticipant,
       icPassportNumber: 'B7654321'
@@ -252,7 +269,7 @@ test('update re-submitting the same IC/passport number does not conflict with it
   const t = convexTest(schema, modules);
   const participantId = await seedParticipant(t);
 
-  await t.withIdentity(staff).mutation(api.participants.update, {
+  await t.withIdentity(admin).mutation(api.participants.update, {
     participantId,
     ...validParticipant,
     fullName: 'Jane Roe'
@@ -266,7 +283,7 @@ test('update saves the new field values', async () => {
   const t = convexTest(schema, modules);
   const participantId = await seedParticipant(t);
 
-  await t.withIdentity(staff).mutation(api.participants.update, {
+  await t.withIdentity(admin).mutation(api.participants.update, {
     participantId,
     fullName: 'Jane Roe',
     icPassportNumber: 'C9999999',
@@ -344,13 +361,24 @@ test('remove rejects an authenticated caller with no role assigned', async () =>
   ).rejects.toThrow();
 });
 
+test('remove rejects a Staff caller', async () => {
+  const t = convexTest(schema, modules);
+  const participantId = await seedParticipant(t);
+
+  await expect(
+    t.withIdentity(staff).mutation(api.participants.remove, { participantId })
+  ).rejects.toThrow();
+
+  expect(await t.run((ctx) => ctx.db.get(participantId))).not.toBeNull();
+});
+
 test('remove rejects a non-existent Participant', async () => {
   const t = convexTest(schema, modules);
   const participantId = await seedParticipant(t);
   await t.run((ctx) => ctx.db.delete(participantId));
 
   await expect(
-    t.withIdentity(staff).mutation(api.participants.remove, { participantId })
+    t.withIdentity(admin).mutation(api.participants.remove, { participantId })
   ).rejects.toThrow();
 });
 
@@ -358,7 +386,7 @@ test('remove deletes a Participant with no Registrations', async () => {
   const t = convexTest(schema, modules);
   const participantId = await seedParticipant(t);
 
-  await t.withIdentity(staff).mutation(api.participants.remove, { participantId });
+  await t.withIdentity(admin).mutation(api.participants.remove, { participantId });
 
   expect(await t.run((ctx) => ctx.db.get(participantId))).toBeNull();
 });
@@ -370,7 +398,7 @@ test('remove rejects a Participant with a paid Registration for an ongoing Trip'
   await seedRegistration(t, { tripId, participantId, paymentStatus: 'paid' });
 
   await expect(
-    t.withIdentity(staff).mutation(api.participants.remove, { participantId })
+    t.withIdentity(admin).mutation(api.participants.remove, { participantId })
   ).rejects.toThrow();
 
   expect(await t.run((ctx) => ctx.db.get(participantId))).not.toBeNull();
@@ -383,7 +411,7 @@ test('remove rejects a Participant with a paid Registration for an upcoming Trip
   await seedRegistration(t, { tripId, participantId, paymentStatus: 'paid' });
 
   await expect(
-    t.withIdentity(staff).mutation(api.participants.remove, { participantId })
+    t.withIdentity(admin).mutation(api.participants.remove, { participantId })
   ).rejects.toThrow();
 
   expect(await t.run((ctx) => ctx.db.get(participantId))).not.toBeNull();
@@ -395,7 +423,7 @@ test('remove allows a Participant whose paid Registration is for a completed Tri
   const tripId = await seedTrip(t, { startDate: daysFromToday(-10), endDate: daysFromToday(-5) });
   await seedRegistration(t, { tripId, participantId, paymentStatus: 'paid' });
 
-  await t.withIdentity(staff).mutation(api.participants.remove, { participantId });
+  await t.withIdentity(admin).mutation(api.participants.remove, { participantId });
 
   expect(await t.run((ctx) => ctx.db.get(participantId))).toBeNull();
 });
@@ -406,7 +434,7 @@ test('remove allows a Participant whose ongoing-Trip Registration is unpaid', as
   const tripId = await seedTrip(t, { startDate: daysFromToday(-5), endDate: daysFromToday(5) });
   await seedRegistration(t, { tripId, participantId, paymentStatus: 'unpaid' });
 
-  await t.withIdentity(staff).mutation(api.participants.remove, { participantId });
+  await t.withIdentity(admin).mutation(api.participants.remove, { participantId });
 
   expect(await t.run((ctx) => ctx.db.get(participantId))).toBeNull();
 });
@@ -417,7 +445,7 @@ test('remove allows a Participant whose ongoing-Trip Registration is refunded', 
   const tripId = await seedTrip(t, { startDate: daysFromToday(-5), endDate: daysFromToday(5) });
   await seedRegistration(t, { tripId, participantId, paymentStatus: 'refunded' });
 
-  await t.withIdentity(staff).mutation(api.participants.remove, { participantId });
+  await t.withIdentity(admin).mutation(api.participants.remove, { participantId });
 
   expect(await t.run((ctx) => ctx.db.get(participantId))).toBeNull();
 });
@@ -442,7 +470,7 @@ test('remove cascades the Registrations and their activity history', async () =>
     })
   );
 
-  await t.withIdentity(staff).mutation(api.participants.remove, { participantId });
+  await t.withIdentity(admin).mutation(api.participants.remove, { participantId });
 
   expect(await t.run((ctx) => ctx.db.get(registrationId))).toBeNull();
   const remainingLogs = await t.run((ctx) =>
@@ -460,7 +488,7 @@ test('remove deletes the passport file along with the Participant', async () => 
   const storageId = await t.run((ctx) => ctx.storage.store(samplePdf()));
   await t.withIdentity(staff).mutation(api.participants.setPassport, { participantId, storageId });
 
-  await t.withIdentity(staff).mutation(api.participants.remove, { participantId });
+  await t.withIdentity(admin).mutation(api.participants.remove, { participantId });
 
   expect(await t.run((ctx) => ctx.storage.getUrl(storageId))).toBeNull();
 });

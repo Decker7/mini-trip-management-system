@@ -23,7 +23,10 @@ import { ParticipantPassport } from './participant-passport';
 export function ParticipantDetail({ participantId }: { participantId: Id<'participants'> }) {
   const router = useRouter();
   const role = useUserRole();
-  const isAssigned = role === 'admin' || role === 'staff';
+  // Editing/deleting a Participant's record is Admin-only — CONTEXT.md's
+  // Staff definition only lists view/search — matching the server-side
+  // `requireAdmin` gate in `participants.update`/`remove`.
+  const isAdmin = role === 'admin';
   const editRolloutEnabled = useFeatureFlagEnabled(PARTICIPANT_EDIT_ROLLOUT_FLAG, false);
 
   const removeParticipant = useMutation(api.participants.remove);
@@ -82,7 +85,7 @@ export function ParticipantDetail({ participantId }: { participantId: Id<'partic
           <CardTitle className={cn(PH_MASK_CLASS, 'text-2xl font-bold')}>
             {participant.fullName}
           </CardTitle>
-          {isAssigned && (
+          {isAdmin && (
             <div className='flex shrink-0 gap-2'>
               {editRolloutEnabled && (
                 <Link
