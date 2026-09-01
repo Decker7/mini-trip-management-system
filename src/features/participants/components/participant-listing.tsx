@@ -67,6 +67,10 @@ export function ParticipantListing() {
 
         <div className='flex flex-wrap items-center gap-2'>
           <Select
+            items={[
+              { value: 'all', label: 'All Trips' },
+              ...(trips?.map((trip) => ({ value: trip._id, label: trip.name })) ?? [])
+            ]}
             value={params.tripId ?? 'all'}
             onValueChange={(value) => {
               if (value === null) return;
@@ -87,6 +91,13 @@ export function ParticipantListing() {
           </Select>
 
           <Select
+            items={[
+              { value: 'all', label: 'All statuses' },
+              ...PAYMENT_STATUSES.map((status) => ({
+                value: status,
+                label: PAYMENT_STATUS_LABEL[status]
+              }))
+            ]}
             value={params.paymentStatus ?? 'all'}
             onValueChange={(value) => {
               if (value === null) return;

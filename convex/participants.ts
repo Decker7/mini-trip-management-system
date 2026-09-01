@@ -1,6 +1,7 @@
 import { ConvexError, v } from 'convex/values';
 import { mutation, query } from './_generated/server';
 import { requireAssignedRole } from './lib/identity';
+import { deriveStatus } from './trips';
 
 /**
  * Kept in sync with `MAX_PASSPORT_FILE_SIZE` in
@@ -27,6 +28,122 @@ export const get = query({
         ? await ctx.storage.getUrl(participant.passportFileId)
         : null
     };
+  }
+});
+
+function validateParticipantFields(args: {
+  fullName: string;
+  icPassportNumber: string;
+  email: string;
+  phone: string;
+}) {
+  if (!args.fullName.trim()) {
+    throw new ConvexError('Full name is required.');
+  }
+  if (!args.icPassportNumber.trim()) {
+    throw new ConvexError('IC/passport number is required.');
+  }
+  if (!args.email.trim()) {
+    throw new ConvexError('Email is required.');
+  }
+  if (!args.phone.trim()) {
+    throw new ConvexError('Phone is required.');
+  }
+}
+
+export const update = mutation({
+  args: {
+    participantId: v.id('participants'),
+    fullName: v.string(),
+    icPassportNumber: v.string(),
+    email: v.string(),
+    phone: v.string()
+  },
+  handler: async (ctx, args) => {
+    await requireAssignedRole(ctx);
+    validateParticipantFields(args);
+
+    const existing = await ctx.db.get(args.participantId);
+    if (!existing) {
+      throw new ConvexError('Participant not found.');
+    }
+
+    // Two Participant rows sharing an IC/passport number would break the
+    // by-IC lookup `registrations.register` relies on to merge repeat
+    // registrants into a single record — so an edit can't hand one
+    // Participant's IC number to another that already has it.
+    const duplicate = await ctx.db
+      .query('participants')
+      .withIndex('by_icPassportNumber', (q) => q.eq('icPassportNumber', args.icPassportNumber))
+      .first();
+    if (duplicate && duplicate._id !== args.participantId) {
+      throw new ConvexError('This IC/passport number is already used by another participant.');
+    }
+
+    await ctx.db.patch(args.participantId, {
+      fullName: args.fullName,
+      icPassportNumber: args.icPassportNumber,
+      email: args.email,
+      phone: args.phone
+    });
+  }
+});
+
+export const remove = mutation({
+  args: { participantId: v.id('participants'), today: v.string() },
+  handler: async (ctx, args) => {
+    await requireAssignedRole(ctx);
+
+    const participant = await ctx.db.get(args.participantId);
+    if (!participant) {
+      throw new ConvexError('Participant not found.');
+    }
+
+    const registrations = await ctx.db
+      .query('registrations')
+      .withIndex('by_participant', (q) => q.eq('participantId', args.participantId))
+      .collect();
+
+    // A paid Registration for a Trip that hasn't finished yet represents
+    // money already collected for a commitment that hasn't been honoured —
+    // deleting the Participant out from under it would strand that
+    // Registration's Trip roster and payment records with no way back to
+    // who paid. The fix is to refund (or wait for the Trip to complete),
+    // not to delete through it.
+    const paidRegistrations = registrations.filter(
+      (registration) => registration.paymentStatus === 'paid'
+    );
+    const paidTrips = await Promise.all(paidRegistrations.map((r) => ctx.db.get(r.tripId)));
+    const hasUnresolvedPaidTrip = paidTrips.some(
+      (trip) => trip && deriveStatus(trip, args.today) !== 'completed'
+    );
+    if (hasUnresolvedPaidTrip) {
+      throw new ConvexError(
+        'This Participant has a paid Registration for a Trip that is ongoing or upcoming. Refund it, or wait until the Trip completes, before deleting.'
+      );
+    }
+
+    // Every Registration this Participant holds is removed along with them —
+    // a deleted Participant can't be left dangling off Trip rosters. Each
+    // Registration's activity history goes with it too, since a history of
+    // changes to a Registration that no longer exists has nothing left to
+    // explain.
+    for (const registration of registrations) {
+      const logs = await ctx.db
+        .query('activityLogs')
+        .withIndex('by_registration_and_changedAt', (q) => q.eq('registrationId', registration._id))
+        .collect();
+      for (const log of logs) {
+        await ctx.db.delete(log._id);
+      }
+      await ctx.db.delete(registration._id);
+    }
+
+    if (participant.passportFileId) {
+      await ctx.storage.delete(participant.passportFileId);
+    }
+
+    await ctx.db.delete(args.participantId);
   }
 });
 
