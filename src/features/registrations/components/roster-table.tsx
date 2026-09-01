@@ -177,6 +177,11 @@ export function RosterTable({
                 <TableCell className={PH_MASK_CLASS}>{entry.phone}</TableCell>
                 <TableCell>
                   <Select
+                    items={[
+                      { value: 'unpaid', label: PAYMENT_STATUS_LABEL.unpaid },
+                      { value: 'paid', label: PAYMENT_STATUS_LABEL.paid },
+                      { value: 'refunded', label: PAYMENT_STATUS_LABEL.refunded }
+                    ]}
                     value={entry.paymentStatus}
                     onValueChange={(value) => {
                       if (value) handlePaymentStatusChange(entry._id, value);

@@ -34,6 +34,11 @@ import { toDateOnlyString, todayDateOnlyString } from '@/features/trips/lib/date
 import { TripStatusBadge } from './trip-status-badge';
 
 const TRIP_STATUSES = ['upcoming', 'ongoing', 'completed'] as const;
+const TRIP_STATUS_LABEL: Record<(typeof TRIP_STATUSES)[number], string> = {
+  upcoming: 'Upcoming',
+  ongoing: 'Ongoing',
+  completed: 'Completed'
+};
 
 export function TripListing() {
   const isAdmin = useUserRole() === 'admin';
@@ -101,6 +106,13 @@ export function TripListing() {
 
         <div className='flex flex-wrap items-center gap-2'>
           <Select
+            items={[
+              { value: 'all', label: 'All statuses' },
+              ...TRIP_STATUSES.map((status) => ({
+                value: status,
+                label: TRIP_STATUS_LABEL[status]
+              }))
+            ]}
             value={params.status ?? 'all'}
             onValueChange={(value) => {
               if (value === null) return;

@@ -219,6 +219,10 @@ function StaffTable({
                 <TableCell className={PH_MASK_CLASS}>{user.email}</TableCell>
                 <TableCell>
                   <Select
+                    items={[
+                      { value: 'admin', label: ROLE_LABEL.admin },
+                      { value: 'staff', label: ROLE_LABEL.staff }
+                    ]}
                     value={user.role ?? undefined}
                     disabled={pendingUserId === user.userId}
                     onValueChange={(value) => onRoleChange(user.userId, value as 'admin' | 'staff')}
