@@ -4,6 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useMutation, useQuery_experimental as useQuery } from 'convex/react';
+import { ConvexError } from 'convex/values';
 import { useFeatureFlagEnabled } from 'posthog-js/react';
 import { toast } from 'sonner';
 import { api } from '../../../../convex/_generated/api';
@@ -17,7 +18,6 @@ import { useUserRole } from '@/hooks/use-user-role';
 import { PARTICIPANT_EDIT_ROLLOUT_FLAG } from '@/lib/feature-flags';
 import { PH_MASK_CLASS } from '@/lib/posthog-config';
 import { cn } from '@/lib/utils';
-import { todayDateOnlyString } from '@/features/trips/lib/date';
 import { ParticipantPassport } from './participant-passport';
 
 export function ParticipantDetail({ participantId }: { participantId: Id<'participants'> }) {
@@ -33,11 +33,13 @@ export function ParticipantDetail({ participantId }: { participantId: Id<'partic
   async function handleConfirmDelete() {
     setIsDeleting(true);
     try {
-      await removeParticipant({ participantId, today: todayDateOnlyString() });
+      await removeParticipant({ participantId });
       toast.success('Participant deleted');
       router.push('/dashboard/participants');
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Couldn't delete the Participant.");
+      toast.error(
+        error instanceof ConvexError ? error.message : "Couldn't delete the Participant."
+      );
       setIsDeleting(false);
     }
   }

@@ -1,7 +1,7 @@
 'use client';
 
 import { useUser } from '@clerk/nextjs';
-import { useQuery } from 'convex/react';
+import { useQuery_experimental as useQuery } from 'convex/react';
 import { useFeatureFlagEnabled } from 'posthog-js/react';
 import PageContainer from '@/components/layout/page-container';
 import { useUserRole } from '@/hooks/use-user-role';
@@ -13,20 +13,29 @@ import { ParticipantForm } from './participant-form';
 export function EditParticipantView({ participantId }: { participantId: Id<'participants'> }) {
   const { isLoaded } = useUser();
   const role = useUserRole();
-  const participant = useQuery(api.participants.get, { participantId });
+  // A malformed id in the URL fails the query's own argument validator
+  // before it can look anything up — the object form surfaces that as
+  // `status: 'error'` instead of throwing during render, mirroring
+  // `ParticipantDetail`'s handling of the same edge case.
+  const state = useQuery({ query: api.participants.get, args: { participantId } });
   // Client-side gate only — a temporary rollout switch, not a security boundary.
-  // Convex's own Staff/Admin role checks already govern who can write.
-  const rolloutEnabled = useFeatureFlagEnabled(PARTICIPANT_EDIT_ROLLOUT_FLAG, false);
+  // Convex's own Staff/Admin role checks already govern who can write. Left
+  // undefined (not defaulted to false) while unresolved, so the loading state
+  // below covers it instead of flashing the "not available yet" fallback.
+  const rolloutEnabled = useFeatureFlagEnabled(PARTICIPANT_EDIT_ROLLOUT_FLAG);
 
-  const isReady = isLoaded && participant !== undefined;
+  const isReady = isLoaded && state.status !== 'pending' && rolloutEnabled !== undefined;
   const isAssigned = role === 'admin' || role === 'staff';
+  const participantMissing =
+    state.status === 'error' || (state.status === 'success' && state.data === null);
+  const participant = state.status === 'success' ? state.data : null;
 
   return (
     <PageContainer
-      access={!isReady || (isAssigned && rolloutEnabled && participant !== null)}
+      access={!isReady || (isAssigned && rolloutEnabled && !participantMissing)}
       accessFallback={
         <div className='text-muted-foreground text-center text-lg'>
-          {participant === null
+          {participantMissing
             ? 'This Participant no longer exists.'
             : !isAssigned
               ? 'Only Admins and Staff can edit Participants.'

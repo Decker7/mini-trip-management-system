@@ -31,24 +31,29 @@ export const get = query({
   }
 });
 
-function validateParticipantFields(args: {
+function normalizeParticipantFields(args: {
   fullName: string;
   icPassportNumber: string;
   email: string;
   phone: string;
 }) {
-  if (!args.fullName.trim()) {
+  const fullName = args.fullName.trim();
+  const icPassportNumber = args.icPassportNumber.trim();
+  const email = args.email.trim();
+  const phone = args.phone.trim();
+  if (!fullName) {
     throw new ConvexError('Full name is required.');
   }
-  if (!args.icPassportNumber.trim()) {
+  if (!icPassportNumber) {
     throw new ConvexError('IC/passport number is required.');
   }
-  if (!args.email.trim()) {
+  if (!email) {
     throw new ConvexError('Email is required.');
   }
-  if (!args.phone.trim()) {
+  if (!phone) {
     throw new ConvexError('Phone is required.');
   }
+  return { fullName, icPassportNumber, email, phone };
 }
 
 export const update = mutation({
@@ -61,7 +66,7 @@ export const update = mutation({
   },
   handler: async (ctx, args) => {
     await requireAssignedRole(ctx);
-    validateParticipantFields(args);
+    const fields = normalizeParticipantFields(args);
 
     const existing = await ctx.db.get(args.participantId);
     if (!existing) {
@@ -71,28 +76,31 @@ export const update = mutation({
     // Two Participant rows sharing an IC/passport number would break the
     // by-IC lookup `registrations.register` relies on to merge repeat
     // registrants into a single record — so an edit can't hand one
-    // Participant's IC number to another that already has it.
+    // Participant's IC number to another that already has it. Normalized
+    // (trimmed) values are used here and in the patch below, so an IC number
+    // that only differs from an existing one by surrounding whitespace is
+    // still caught, and never persisted with that whitespace intact.
     const duplicate = await ctx.db
       .query('participants')
-      .withIndex('by_icPassportNumber', (q) => q.eq('icPassportNumber', args.icPassportNumber))
+      .withIndex('by_icPassportNumber', (q) => q.eq('icPassportNumber', fields.icPassportNumber))
       .first();
     if (duplicate && duplicate._id !== args.participantId) {
       throw new ConvexError('This IC/passport number is already used by another participant.');
     }
 
-    await ctx.db.patch(args.participantId, {
-      fullName: args.fullName,
-      icPassportNumber: args.icPassportNumber,
-      email: args.email,
-      phone: args.phone
-    });
+    await ctx.db.patch(args.participantId, fields);
   }
 });
 
 export const remove = mutation({
-  args: { participantId: v.id('participants'), today: v.string() },
+  args: { participantId: v.id('participants') },
   handler: async (ctx, args) => {
     await requireAssignedRole(ctx);
+    // Derived server-side, not taken from the caller — this date gates
+    // whether a paid Trip counts as "completed" below, and trusting a
+    // client-supplied date here would let a caller pass a future date to
+    // delete a Participant whose paid Registration hasn't actually resolved.
+    const today = new Date(Date.now()).toISOString().slice(0, 10);
 
     const participant = await ctx.db.get(args.participantId);
     if (!participant) {
@@ -115,7 +123,7 @@ export const remove = mutation({
     );
     const paidTrips = await Promise.all(paidRegistrations.map((r) => ctx.db.get(r.tripId)));
     const hasUnresolvedPaidTrip = paidTrips.some(
-      (trip) => trip && deriveStatus(trip, args.today) !== 'completed'
+      (trip) => trip && deriveStatus(trip, today) !== 'completed'
     );
     if (hasUnresolvedPaidTrip) {
       throw new ConvexError(

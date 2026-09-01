@@ -2,15 +2,13 @@
 
 import { useRouter } from 'next/navigation';
 import { useMutation } from 'convex/react';
+import { ConvexError } from 'convex/values';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { FieldGroup } from '@/components/ui/field';
 import { useAppForm } from '@/lib/form';
-import {
-  participantSchema,
-  type ParticipantFormValues
-} from '@/features/participants/schemas/participant';
+import { participantSchema } from '@/features/participants/schemas/participant';
 import { api } from '../../../../convex/_generated/api';
 import type { Id } from '../../../../convex/_generated/dataModel';
 
@@ -32,7 +30,7 @@ export function ParticipantForm({ initialData }: { initialData: ParticipantIniti
       icPassportNumber: initialData.icPassportNumber,
       email: initialData.email,
       phone: initialData.phone
-    } as ParticipantFormValues,
+    },
     validators: {
       onSubmit: participantSchema
     },
@@ -43,7 +41,7 @@ export function ParticipantForm({ initialData }: { initialData: ParticipantIniti
         router.push(`/dashboard/participants/${initialData._id}`);
       } catch (error) {
         toast.error(
-          error instanceof Error ? error.message : "Couldn't save the participant. Try again."
+          error instanceof ConvexError ? error.message : "Couldn't save the participant. Try again."
         );
       }
     }
@@ -65,34 +63,30 @@ export function ParticipantForm({ initialData }: { initialData: ParticipantIniti
         >
           <FieldGroup>
             <div className='grid grid-cols-1 gap-6 md:grid-cols-2'>
-              <form.AppField
-                name='fullName'
-                children={(field) => (
+              <form.AppField name='fullName'>
+                {(field) => (
                   <field.TextField label='Full Name' required placeholder='Enter full name' />
                 )}
-              />
-              <form.AppField
-                name='icPassportNumber'
-                children={(field) => (
+              </form.AppField>
+              <form.AppField name='icPassportNumber'>
+                {(field) => (
                   <field.TextField
                     label='IC/Passport Number'
                     required
                     placeholder='Enter IC/passport number'
                   />
                 )}
-              />
-              <form.AppField
-                name='email'
-                children={(field) => (
+              </form.AppField>
+              <form.AppField name='email'>
+                {(field) => (
                   <field.TextField label='Email' required type='email' placeholder='Enter email' />
                 )}
-              />
-              <form.AppField
-                name='phone'
-                children={(field) => (
+              </form.AppField>
+              <form.AppField name='phone'>
+                {(field) => (
                   <field.TextField label='Phone' required placeholder='Enter phone number' />
                 )}
-              />
+              </form.AppField>
             </div>
           </FieldGroup>
 

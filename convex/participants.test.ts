@@ -2,7 +2,7 @@
 import { convexTest } from 'convex-test';
 import { expect, test } from 'vitest';
 import { api } from './_generated/api';
-import type { Id } from './_generated/dataModel';
+import type { Doc, Id } from './_generated/dataModel';
 import schema from './schema';
 
 const modules = import.meta.glob('./**/*.ts');
@@ -208,16 +208,21 @@ test('update rejects a non-existent Participant', async () => {
   ).rejects.toThrow();
 });
 
-test('update rejects blank required fields', async () => {
-  const t = convexTest(schema, modules);
-  const participantId = await seedParticipant(t);
+test.each(['fullName', 'icPassportNumber', 'email', 'phone'] as const)(
+  'update rejects a blank %s',
+  async (field) => {
+    const t = convexTest(schema, modules);
+    const participantId = await seedParticipant(t);
 
-  await expect(
-    t
-      .withIdentity(staff)
-      .mutation(api.participants.update, { participantId, ...validParticipant, fullName: '  ' })
-  ).rejects.toThrow();
-});
+    await expect(
+      t.withIdentity(staff).mutation(api.participants.update, {
+        participantId,
+        ...validParticipant,
+        [field]: '  '
+      })
+    ).rejects.toThrow();
+  }
+);
 
 test('update rejects an IC/passport number already used by another Participant', async () => {
   const t = convexTest(schema, modules);
@@ -278,7 +283,13 @@ test('update saves the new field values', async () => {
   });
 });
 
-const today = '2026-08-31';
+// `remove` derives "today" from the real clock rather than taking it as an
+// argument (see convex/participants.ts), so these Trip fixtures are dated
+// relative to the actual current date instead of a fixed string — a fixed
+// past/future date would silently drift as time passes.
+function daysFromToday(offsetDays: number) {
+  return new Date(Date.now() + offsetDays * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+}
 
 async function seedTrip(
   t: ReturnType<typeof convexTest>,
@@ -302,7 +313,7 @@ async function seedRegistration(
   args: {
     tripId: Id<'trips'>;
     participantId: Id<'participants'>;
-    paymentStatus: 'unpaid' | 'paid' | 'refunded';
+    paymentStatus: Doc<'registrations'>['paymentStatus'];
   }
 ) {
   return await t.run((ctx) =>
@@ -321,7 +332,7 @@ test('remove rejects an unauthenticated caller', async () => {
   const t = convexTest(schema, modules);
   const participantId = await seedParticipant(t);
 
-  await expect(t.mutation(api.participants.remove, { participantId, today })).rejects.toThrow();
+  await expect(t.mutation(api.participants.remove, { participantId })).rejects.toThrow();
 });
 
 test('remove rejects an authenticated caller with no role assigned', async () => {
@@ -329,7 +340,7 @@ test('remove rejects an authenticated caller with no role assigned', async () =>
   const participantId = await seedParticipant(t);
 
   await expect(
-    t.withIdentity(roleless).mutation(api.participants.remove, { participantId, today })
+    t.withIdentity(roleless).mutation(api.participants.remove, { participantId })
   ).rejects.toThrow();
 });
 
@@ -339,7 +350,7 @@ test('remove rejects a non-existent Participant', async () => {
   await t.run((ctx) => ctx.db.delete(participantId));
 
   await expect(
-    t.withIdentity(staff).mutation(api.participants.remove, { participantId, today })
+    t.withIdentity(staff).mutation(api.participants.remove, { participantId })
   ).rejects.toThrow();
 });
 
@@ -347,7 +358,7 @@ test('remove deletes a Participant with no Registrations', async () => {
   const t = convexTest(schema, modules);
   const participantId = await seedParticipant(t);
 
-  await t.withIdentity(staff).mutation(api.participants.remove, { participantId, today });
+  await t.withIdentity(staff).mutation(api.participants.remove, { participantId });
 
   expect(await t.run((ctx) => ctx.db.get(participantId))).toBeNull();
 });
@@ -355,11 +366,11 @@ test('remove deletes a Participant with no Registrations', async () => {
 test('remove rejects a Participant with a paid Registration for an ongoing Trip', async () => {
   const t = convexTest(schema, modules);
   const participantId = await seedParticipant(t);
-  const tripId = await seedTrip(t, { startDate: '2026-08-01', endDate: '2026-09-15' });
+  const tripId = await seedTrip(t, { startDate: daysFromToday(-5), endDate: daysFromToday(5) });
   await seedRegistration(t, { tripId, participantId, paymentStatus: 'paid' });
 
   await expect(
-    t.withIdentity(staff).mutation(api.participants.remove, { participantId, today })
+    t.withIdentity(staff).mutation(api.participants.remove, { participantId })
   ).rejects.toThrow();
 
   expect(await t.run((ctx) => ctx.db.get(participantId))).not.toBeNull();
@@ -368,11 +379,11 @@ test('remove rejects a Participant with a paid Registration for an ongoing Trip'
 test('remove rejects a Participant with a paid Registration for an upcoming Trip', async () => {
   const t = convexTest(schema, modules);
   const participantId = await seedParticipant(t);
-  const tripId = await seedTrip(t, { startDate: '2026-09-10', endDate: '2026-09-15' });
+  const tripId = await seedTrip(t, { startDate: daysFromToday(5), endDate: daysFromToday(10) });
   await seedRegistration(t, { tripId, participantId, paymentStatus: 'paid' });
 
   await expect(
-    t.withIdentity(staff).mutation(api.participants.remove, { participantId, today })
+    t.withIdentity(staff).mutation(api.participants.remove, { participantId })
   ).rejects.toThrow();
 
   expect(await t.run((ctx) => ctx.db.get(participantId))).not.toBeNull();
@@ -381,10 +392,10 @@ test('remove rejects a Participant with a paid Registration for an upcoming Trip
 test('remove allows a Participant whose paid Registration is for a completed Trip', async () => {
   const t = convexTest(schema, modules);
   const participantId = await seedParticipant(t);
-  const tripId = await seedTrip(t, { startDate: '2026-01-01', endDate: '2026-01-05' });
+  const tripId = await seedTrip(t, { startDate: daysFromToday(-10), endDate: daysFromToday(-5) });
   await seedRegistration(t, { tripId, participantId, paymentStatus: 'paid' });
 
-  await t.withIdentity(staff).mutation(api.participants.remove, { participantId, today });
+  await t.withIdentity(staff).mutation(api.participants.remove, { participantId });
 
   expect(await t.run((ctx) => ctx.db.get(participantId))).toBeNull();
 });
@@ -392,10 +403,21 @@ test('remove allows a Participant whose paid Registration is for a completed Tri
 test('remove allows a Participant whose ongoing-Trip Registration is unpaid', async () => {
   const t = convexTest(schema, modules);
   const participantId = await seedParticipant(t);
-  const tripId = await seedTrip(t, { startDate: '2026-08-01', endDate: '2026-09-15' });
+  const tripId = await seedTrip(t, { startDate: daysFromToday(-5), endDate: daysFromToday(5) });
   await seedRegistration(t, { tripId, participantId, paymentStatus: 'unpaid' });
 
-  await t.withIdentity(staff).mutation(api.participants.remove, { participantId, today });
+  await t.withIdentity(staff).mutation(api.participants.remove, { participantId });
+
+  expect(await t.run((ctx) => ctx.db.get(participantId))).toBeNull();
+});
+
+test('remove allows a Participant whose ongoing-Trip Registration is refunded', async () => {
+  const t = convexTest(schema, modules);
+  const participantId = await seedParticipant(t);
+  const tripId = await seedTrip(t, { startDate: daysFromToday(-5), endDate: daysFromToday(5) });
+  await seedRegistration(t, { tripId, participantId, paymentStatus: 'refunded' });
+
+  await t.withIdentity(staff).mutation(api.participants.remove, { participantId });
 
   expect(await t.run((ctx) => ctx.db.get(participantId))).toBeNull();
 });
@@ -403,7 +425,7 @@ test('remove allows a Participant whose ongoing-Trip Registration is unpaid', as
 test('remove cascades the Registrations and their activity history', async () => {
   const t = convexTest(schema, modules);
   const participantId = await seedParticipant(t);
-  const tripId = await seedTrip(t, { startDate: '2026-01-01', endDate: '2026-01-05' });
+  const tripId = await seedTrip(t, { startDate: daysFromToday(-10), endDate: daysFromToday(-5) });
   const registrationId = await seedRegistration(t, {
     tripId,
     participantId,
@@ -420,7 +442,7 @@ test('remove cascades the Registrations and their activity history', async () =>
     })
   );
 
-  await t.withIdentity(staff).mutation(api.participants.remove, { participantId, today });
+  await t.withIdentity(staff).mutation(api.participants.remove, { participantId });
 
   expect(await t.run((ctx) => ctx.db.get(registrationId))).toBeNull();
   const remainingLogs = await t.run((ctx) =>
@@ -438,7 +460,7 @@ test('remove deletes the passport file along with the Participant', async () => 
   const storageId = await t.run((ctx) => ctx.storage.store(samplePdf()));
   await t.withIdentity(staff).mutation(api.participants.setPassport, { participantId, storageId });
 
-  await t.withIdentity(staff).mutation(api.participants.remove, { participantId, today });
+  await t.withIdentity(staff).mutation(api.participants.remove, { participantId });
 
   expect(await t.run((ctx) => ctx.storage.getUrl(storageId))).toBeNull();
 });
